@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Track Jobs — Dasbor Lamaran Kerja</title>
+  <meta name="description" content="Pantau dan kelola semua lamaran kerja Anda dalam satu dasbor terpusat." />
+
+  <!-- Tailwind CSS via CDN (browser build — untuk prototipe/pengembangan saja, bukan produksi) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary:   '#3368A0',
+            secondary: '#66A3BF',
+            teal:      '#C8DFDB',
+            ivory:     '#F2EFE7',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Custom styles setelah Tailwind -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-ivory min-h-screen">
+
+  <!-- ===================== SIDEBAR OVERLAY (mobile) ===================== -->
+  <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
+
+  <!-- ===================== APP WRAPPER ===================== -->
+  <div class="app-wrapper">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside id="sidebar" class="sidebar" role="navigation" aria-label="Navigasi utama">
+      <!-- Logo -->
+      <div class="sidebar-logo">
+        <div class="logo-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <path d="M8 21h8M12 17v4"/>
+          </svg>
+        </div>
+        <span class="logo-text">Track Jobs</span>
+        <!-- Close button (mobile) -->
+        <button id="sidebar-close" class="sidebar-close" aria-label="Tutup navigasi">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Navigation -->
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="dashboard" aria-current="page">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <span>Dasbor</span>
+        </button>
+        <button class="nav-item" data-view="applications" aria-current="false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Lamaran</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar footer -->
+      <div class="sidebar-footer">
+        <p class="text-xs text-center opacity-60">v1.0 · IBM Bob Challenge</p>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <div class="main-content">
+
+      <!-- Top bar -->
+      <header class="topbar">
+        <button id="menu-toggle" class="menu-toggle" aria-label="Buka navigasi" aria-expanded="false" aria-controls="sidebar">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <div class="topbar-title" id="topbar-title">Dasbor</div>
+        <button id="btn-add-top" class="btn-primary-sm" aria-label="Tambah lamaran baru">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span class="hidden sm:inline">Tambah</span>
+        </button>
+      </header>
+
+      <!-- ======== VIEW: DASHBOARD ======== -->
+      <main id="view-dashboard" class="view-content" role="main">
+        <!-- Welcome -->
+        <section class="welcome-section">
+          <div>
+            <h1 class="welcome-title" id="welcome-heading">Selamat Datang! 👋</h1>
+            <p class="welcome-sub">Pantau semua lamaran kerja Anda dalam satu tempat.</p>
+          </div>
+          <button id="btn-add-dashboard" class="btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Tambah Pekerjaan
+          </button>
+        </section>
+
+        <!-- Summary cards -->
+        <section class="stats-grid" aria-label="Ringkasan lamaran">
+          <div class="stat-card stat-total">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              </svg>
+            </div>
+            <div>
+              <div class="stat-value" id="stat-total">0</div>
+              <div class="stat-label">Total Lamaran</div>
+            </div>
+          </div>
+          <div class="stat-card stat-applied">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+            </div>
+            <div>
+              <div class="stat-value" id="stat-applied">0</div>
+              <div class="stat-label">Dilamar</div>
+            </div>
+          </div>
+          <div class="stat-card stat-interview">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </div>
+            <div>
+              <div class="stat-value" id="stat-interview">0</div>
+              <div class="stat-label">Wawancara</div>
+            </div>
+          </div>
+          <div class="stat-card stat-offered">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <div>
+              <div class="stat-value" id="stat-offered">0</div>
+              <div class="stat-label">Ditawari</div>
+            </div>
+          </div>
+          <div class="stat-card stat-rejected">
+            <div class="stat-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <div>
+              <div class="stat-value" id="stat-rejected">0</div>
+              <div class="stat-label">Ditolak</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Recent applications -->
+        <section class="recent-section">
+          <div class="section-header">
+            <h2 class="section-title">Lamaran Terbaru</h2>
+            <button class="btn-link" data-view="applications">Lihat Semua →</button>
+          </div>
+          <div id="recent-list" class="recent-list"></div>
+        </section>
+      </main>
+
+      <!-- ======== VIEW: APPLICATIONS ======== -->
+      <main id="view-applications" class="view-content hidden" role="main">
+        <!-- Toolbar: search + filter + sort + add -->
+        <section class="toolbar" aria-label="Filter dan pencarian">
+          <div class="search-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input id="search-input" type="search" placeholder="Cari perusahaan atau posisi…" class="search-input" aria-label="Cari lamaran" />
+          </div>
+          <div class="filter-row">
+            <select id="filter-status" class="select-filter" aria-label="Filter status">
+              <option value="">Semua Status</option>
+              <option value="Saved">Disimpan</option>
+              <option value="Applied">Dilamar</option>
+              <option value="Assessment">Penilaian</option>
+              <option value="Interview">Wawancara</option>
+              <option value="Offered">Ditawari</option>
+              <option value="Rejected">Ditolak</option>
+              <option value="Withdrawn">Ditarik Kembali</option>
+            </select>
+            <select id="filter-type" class="select-filter" aria-label="Filter jenis pekerjaan">
+              <option value="">Semua Jenis</option>
+              <option value="Full-time">Full-time</option>
+              <option value="Part-time">Part-time</option>
+              <option value="Internship">Magang</option>
+              <option value="Contract">Kontrak</option>
+              <option value="Freelance">Freelance</option>
+              <option value="Remote">Remote</option>
+            </select>
+            <select id="sort-by" class="select-filter" aria-label="Urutkan berdasarkan">
+              <option value="newest">Terbaru</option>
+              <option value="oldest">Terlama</option>
+              <option value="deadline">Tenggat Terdekat</option>
+              <option value="company">Nama Perusahaan</option>
+            </select>
+          </div>
+        </section>
+
+        <!-- Applications list -->
+        <div id="applications-list" class="applications-grid"></div>
+      </main>
+
+    </div><!-- end .main-content -->
+  </div><!-- end .app-wrapper -->
+
+  <!-- ===================== MODAL: ADD / EDIT JOB ===================== -->
+  <div id="job-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="modal-title" class="modal-title">Tambah Pekerjaan</h2>
+        <button id="modal-close" class="modal-close" aria-label="Tutup formulir">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <form id="job-form" novalidate class="modal-form" autocomplete="off">
+        <input type="hidden" id="form-id" />
+
+        <div class="form-grid">
+          <!-- Company -->
+          <div class="form-group">
+            <label for="form-company" class="form-label">Nama Perusahaan <span class="required-star" aria-hidden="true">*</span></label>
+            <input type="text" id="form-company" class="form-input" placeholder="mis. Google, Tokopedia…" maxlength="120" required aria-required="true" />
+            <span class="form-error" id="err-company" role="alert"></span>
+          </div>
+          <!-- Position -->
+          <div class="form-group">
+            <label for="form-position" class="form-label">Posisi Pekerjaan <span class="required-star" aria-hidden="true">*</span></label>
+            <input type="text" id="form-position" class="form-input" placeholder="mis. Frontend Developer…" maxlength="120" required aria-required="true" />
+            <span class="form-error" id="err-position" role="alert"></span>
+          </div>
+          <!-- Location -->
+          <div class="form-group">
+            <label for="form-location" class="form-label">Lokasi</label>
+            <input type="text" id="form-location" class="form-input" placeholder="mis. Jakarta, Remote…" maxlength="100" />
+          </div>
+          <!-- Job Type -->
+          <div class="form-group">
+            <label for="form-type" class="form-label">Jenis Pekerjaan</label>
+            <select id="form-type" class="form-input">
+              <option value="">— Pilih —</option>
+              <option value="Full-time">Full-time</option>
+              <option value="Part-time">Part-time</option>
+              <option value="Internship">Magang</option>
+              <option value="Contract">Kontrak</option>
+              <option value="Freelance">Freelance</option>
+              <option value="Remote">Remote</option>
+            </select>
+          </div>
+          <!-- Status -->
+          <div class="form-group">
+            <label for="form-status" class="form-label">Status</label>
+            <select id="form-status" class="form-input">
+              <option value="Saved">Disimpan</option>
+              <option value="Applied">Dilamar</option>
+              <option value="Assessment">Penilaian</option>
+              <option value="Interview">Wawancara</option>
+              <option value="Offered">Ditawari</option>
+              <option value="Rejected">Ditolak</option>
+              <option value="Withdrawn">Ditarik Kembali</option>
+            </select>
+          </div>
+          <!-- Apply Date -->
+          <div class="form-group">
+            <label for="form-apply-date" class="form-label">Tanggal Lamaran</label>
+            <input type="date" id="form-apply-date" class="form-input" />
+          </div>
+          <!-- Deadline -->
+          <div class="form-group">
+            <label for="form-deadline" class="form-label">Tenggat Waktu</label>
+            <input type="date" id="form-deadline" class="form-input" />
+          </div>
+          <!-- Salary -->
+          <div class="form-group">
+            <label for="form-salary" class="form-label">Kisaran Gaji</label>
+            <input type="text" id="form-salary" class="form-input" placeholder="mis. Rp 8 – 12 juta / bulan" maxlength="80" />
+          </div>
+          <!-- Source / URL -->
+          <div class="form-group form-group-full">
+            <label for="form-source" class="form-label">Sumber / URL Lamaran</label>
+            <input type="url" id="form-source" class="form-input" placeholder="https://…" maxlength="300" />
+            <span class="form-error" id="err-source" role="alert"></span>
+          </div>
+          <!-- Notes -->
+          <div class="form-group form-group-full">
+            <label for="form-notes" class="form-label">Catatan</label>
+            <textarea id="form-notes" class="form-input form-textarea" placeholder="Informasi tambahan, kontak rekruter, tahap selanjutnya…" maxlength="500" rows="3"></textarea>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" id="btn-cancel" class="btn-secondary">Batal</button>
+          <button type="submit" id="btn-submit" class="btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: DETAIL VIEW ===================== -->
+  <div id="detail-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="detail-modal-title" class="modal-title">Detail Lamaran</h2>
+        <button id="detail-modal-close" class="modal-close" aria-label="Tutup detail">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="detail-content" class="detail-content"></div>
+      <div class="form-actions">
+        <button id="detail-edit-btn" class="btn-secondary">Edit</button>
+        <button id="detail-delete-btn" class="btn-danger">Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: CONFIRM DELETE ===================== -->
+  <div id="confirm-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="modal-box modal-box-sm">
+      <div class="modal-header">
+        <h2 id="confirm-title" class="modal-title">Konfirmasi Hapus</h2>
+      </div>
+      <p class="confirm-text">Apakah Anda yakin ingin menghapus lamaran ini? Tindakan ini tidak dapat dibatalkan.</p>
+      <div class="form-actions">
+        <button id="confirm-cancel" class="btn-secondary">Batal</button>
+        <button id="confirm-ok" class="btn-danger">Ya, Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TOAST ===================== -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Script utama aplikasi -->
+  <script src="script.js"></script>
+</body>
+</html>
