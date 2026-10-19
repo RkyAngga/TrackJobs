@@ -111,6 +111,69 @@ body {
   .sidebar-close { display: none !important; }
 }
 
+/* Mobile sidebar: nyaman untuk layar kecil dan sentuhan jari */
+@media (max-width: 1023px) {
+  .sidebar {
+    width: min(84vw, 320px);
+    max-width: calc(100vw - 28px);
+    height: 100dvh;
+    min-height: 100vh;
+    box-shadow: 8px 0 28px rgba(15, 45, 75, 0.22);
+    overscroll-behavior: contain;
+  }
+
+  .sidebar-logo {
+    min-height: 68px;
+    padding: 14px 16px;
+  }
+
+  .sidebar-close {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-nav {
+    padding: 14px 12px;
+    gap: 6px;
+    overflow-y: auto;
+  }
+
+  .nav-item {
+    min-height: 46px;
+    padding: 11px 13px;
+    font-size: 0.95rem;
+  }
+
+  .sidebar-footer {
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .sidebar-overlay {
+    background: rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(2px);
+  }
+}
+
+@media (max-width: 380px) {
+  .sidebar {
+    width: calc(100vw - 18px);
+    max-width: none;
+  }
+
+  .sidebar-logo {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .sidebar-nav {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+
 /* Sidebar overlay (mobile) */
 .sidebar-overlay {
   display: none;
