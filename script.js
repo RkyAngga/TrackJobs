@@ -1208,14 +1208,18 @@ function registerEventListeners() {
    ========================================================================= */
 
 async function init() {
+  // Daftarkan event listener dan results count terlebih dahulu
+  // agar UI bisa berinteraksi meski Supabase belum siap
+  registerEventListeners();
+  injectResultsCount();
+
+  // Tampilkan loading hanya setelah DOM pasti siap
   showLoadingScreen();
 
   // Pastikan Supabase SDK sudah termuat dari CDN
   if (typeof supabase === 'undefined') {
     console.error('Supabase SDK belum termuat. Periksa koneksi internet.');
     showAuthPage();
-    registerEventListeners();
-    injectResultsCount();
     return;
   }
 
@@ -1224,14 +1228,8 @@ async function init() {
   if (!configured) {
     document.getElementById('supabase-warning').classList.remove('hidden');
     showAuthPage();
-    registerEventListeners();
-    injectResultsCount();
     return;
   }
-
-  // Daftarkan semua event listener
-  registerEventListeners();
-  injectResultsCount();
 
   // Pantau perubahan sesi autentikasi
   db.auth.onAuthStateChange(async (event, session) => {
