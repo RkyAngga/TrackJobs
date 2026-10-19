@@ -27,70 +27,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const RECENT_LIMIT = 5;
 
-/** Data contoh untuk onboarding — bisa dihapus oleh user */
-const SAMPLE_JOBS = [
-  {
-    company: 'Tokopedia',
-    position: 'Frontend Developer',
-    location: 'Jakarta Selatan',
-    type: 'Full-time',
-    status: 'Interview',
-    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-10); return d.toISOString().split('T')[0]; })(),
-    deadline: (() => { const d = new Date(); d.setDate(d.getDate()+7); return d.toISOString().split('T')[0]; })(),
-    salary: 'Rp 12 – 18 juta / bulan',
-    source: 'https://www.linkedin.com',
-    notes: 'Sudah lolos screening awal. Jadwal interview teknikal minggu depan.',
-  },
-  {
-    company: 'Gojek',
-    position: 'Product Manager Intern',
-    location: 'Jakarta Pusat',
-    type: 'Internship',
-    status: 'Applied',
-    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-5); return d.toISOString().split('T')[0]; })(),
-    deadline: (() => { const d = new Date(); d.setDate(d.getDate()+14); return d.toISOString().split('T')[0]; })(),
-    salary: 'Rp 3 – 5 juta / bulan',
-    source: 'https://careers.gojek.com',
-    notes: 'Magang 6 bulan, full remote. Apply via portal karir.',
-  },
-  {
-    company: 'Traveloka',
-    position: 'UI/UX Designer',
-    location: 'Remote',
-    type: 'Remote',
-    status: 'Assessment',
-    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-15); return d.toISOString().split('T')[0]; })(),
-    deadline: (() => { const d = new Date(); d.setDate(d.getDate()+3); return d.toISOString().split('T')[0]; })(),
-    salary: 'Rp 10 – 15 juta / bulan',
-    source: 'https://www.traveloka.com/career',
-    notes: 'Tugas portfolio design: buat ulang halaman checkout dalam 3 hari.',
-  },
-  {
-    company: 'Shopee Indonesia',
-    position: 'Data Analyst',
-    location: 'Jakarta Utara',
-    type: 'Full-time',
-    status: 'Offered',
-    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-25); return d.toISOString().split('T')[0]; })(),
-    deadline: '',
-    salary: 'Rp 14 – 20 juta / bulan',
-    source: 'https://careers.shopee.co.id',
-    notes: 'Tawaran diterima! Perlu keputusan sebelum akhir bulan ini.',
-  },
-  {
-    company: 'Bukalapak',
-    position: 'Backend Engineer',
-    location: 'Bandung',
-    type: 'Full-time',
-    status: 'Rejected',
-    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().split('T')[0]; })(),
-    deadline: '',
-    salary: 'Rp 10 – 14 juta / bulan',
-    source: 'https://careers.bukalapak.com',
-    notes: 'Ditolak setelah wawancara teknis tahap 2. Follow up untuk feedback.',
-  },
-];
-
 /** Status label dan kelas badge */
 const STATUS_CONFIG = {
   Saved:     { label: 'Disimpan',        badge: 'badge-saved' },
@@ -736,44 +672,13 @@ function buildEmptyState(message) {
     <p>${message ? 'Coba ubah kata kunci atau filter Anda.' : 'Mulai tambahkan lamaran kerja pertama Anda!'}</p>
   `;
   if (!message) {
-    const btnWrap = document.createElement('div');
-    btnWrap.className = 'empty-state-actions';
-
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
     btn.textContent = '+ Tambah Pekerjaan';
     btn.addEventListener('click', openAddModal);
-
-    const sampleBtn = document.createElement('button');
-    sampleBtn.className = 'btn-secondary';
-    sampleBtn.textContent = 'Muat Contoh Data';
-    sampleBtn.addEventListener('click', loadSampleData);
-
-    btnWrap.append(btn, sampleBtn);
-    div.appendChild(btnWrap);
+    div.appendChild(btn);
   }
   return div;
-}
-
-/** Masukkan data contoh ke Supabase untuk onboarding */
-async function loadSampleData() {
-  if (!state.currentUser) return;
-
-  showToast('Memuat contoh data…', 'info');
-
-  let added = 0;
-  for (const job of SAMPLE_JOBS) {
-    const created = await insertJob(job);
-    if (created) {
-      state.jobs.unshift(created);
-      added++;
-    }
-  }
-
-  if (added > 0) {
-    refreshUI();
-    showToast(`${added} data contoh berhasil dimuat! Anda bisa menghapusnya kapan saja.`, 'success');
-  }
 }
 
 /* =========================================================================
@@ -805,17 +710,12 @@ function renderRecentList() {
       <h3>Belum ada lamaran</h3>
       <p>Tambahkan lamaran pertama Anda untuk mulai melacak progres.</p>
     `;
-    const btnWrap = document.createElement('div');
     btnWrap.className = 'empty-state-actions';
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
     btn.textContent = '+ Tambah Pekerjaan';
     btn.addEventListener('click', openAddModal);
-    const sampleBtn = document.createElement('button');
-    sampleBtn.className = 'btn-secondary';
-    sampleBtn.textContent = 'Muat Contoh Data';
-    sampleBtn.addEventListener('click', loadSampleData);
-    btnWrap.append(btn, sampleBtn);
+    btnWrap.append(btn);
     empty.appendChild(btnWrap);
     container.appendChild(empty);
     return;

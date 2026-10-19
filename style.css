@@ -24,6 +24,10 @@
   --color-warning:   #d97706;
   --color-error:     #dc2626;
   --color-info:      var(--color-primary);
+  --color-sky:       #e0f2fe;
+  --color-blue-soft: #eff6ff;
+  --color-purple:    #8b5cf6;
+  --color-cyan:      #06b6d4;
 
   --sidebar-width:   240px;
   --topbar-height:   60px;
@@ -43,6 +47,10 @@ body {
   font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
   background-color: var(--color-ivory);
   color: var(--color-text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
@@ -166,7 +174,7 @@ body {
   gap: 10px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  color: rgba(255,255,255,0.75);
+  color: rgba(255,255,255,0.86);
   font-size: 0.925rem;
   font-weight: 500;
   background: none;
@@ -1598,8 +1606,6 @@ body {
 
 .welcome-section {
   animation: fadeSlideUp 0.35s ease both;
-  /* Subtle shimmer sweep */
-  background-size: 800px 100%;
 }
 
 /* ─── Job cards — staggered di grid ─────────────────────────────────────── */
