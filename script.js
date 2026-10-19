@@ -1,31 +1,41 @@
 /**
- * Track Jobs — Main Application Script
- * ======================================
+ * Track Jobs — Main Application Script (v2.0 dengan Supabase)
+ * =============================================================
  * Vanilla JavaScript — tanpa framework atau pustaka eksternal.
- * Data disimpan menggunakan localStorage di browser lokal pengguna.
+ * Data disimpan di Supabase (PostgreSQL) per akun pengguna.
  *
- * Catatan: localStorage hanya tersedia di browser yang sama pada perangkat
- * yang sama dan TIDAK menyinkronkan data antar perangkat.
+ * SETUP: Ganti SUPABASE_URL dan SUPABASE_ANON_KEY di bawah ini
+ * dengan nilai dari project Supabase Anda.
+ * Lihat instruksi lengkap di bagian bawah file ini.
  */
 
 'use strict';
 
 /* =========================================================================
+   KONFIGURASI SUPABASE
+   =========================================================================
+   Ganti dua nilai ini dengan kredensial project Supabase Anda.
+   Dapatkan dari: https://app.supabase.com → Project Settings → API
+   ========================================================================= */
+
+const SUPABASE_URL      = 'https://czqrfziapwiitoxfvobs.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cXJmemlhcHdpaXRveGZ2b2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzODc0OTUsImV4cCI6MjEwNzk2MzQ5NX0.fFat_YjU7KXJ8-GMtZy0JrcoK6a781uFMd3GH3cs7Yc';
+
+/* =========================================================================
    CONSTANTS & CONFIGURATION
    ========================================================================= */
 
-const STORAGE_KEY = 'trackjobs_data';
 const RECENT_LIMIT = 5;
 
 /** Status label dan kelas badge */
 const STATUS_CONFIG = {
-  Saved:     { label: 'Disimpan',       badge: 'badge-saved' },
-  Applied:   { label: 'Dilamar',        badge: 'badge-applied' },
-  Assessment:{ label: 'Penilaian',      badge: 'badge-assessment' },
-  Interview: { label: 'Wawancara',      badge: 'badge-interview' },
-  Offered:   { label: 'Ditawari',       badge: 'badge-offered' },
-  Rejected:  { label: 'Ditolak',        badge: 'badge-rejected' },
-  Withdrawn: { label: 'Ditarik Kembali',badge: 'badge-withdrawn' },
+  Saved:     { label: 'Disimpan',        badge: 'badge-saved' },
+  Applied:   { label: 'Dilamar',         badge: 'badge-applied' },
+  Assessment:{ label: 'Penilaian',       badge: 'badge-assessment' },
+  Interview: { label: 'Wawancara',       badge: 'badge-interview' },
+  Offered:   { label: 'Ditawari',        badge: 'badge-offered' },
+  Rejected:  { label: 'Ditolak',         badge: 'badge-rejected' },
+  Withdrawn: { label: 'Ditarik Kembali', badge: 'badge-withdrawn' },
 };
 
 /* =========================================================================
@@ -33,11 +43,12 @@ const STATUS_CONFIG = {
    ========================================================================= */
 
 let state = {
-  jobs: [],          // semua data lamaran
+  jobs: [],
   currentView: 'dashboard',
-  editingId: null,   // ID job yang sedang diedit
-  deletingId: null,  // ID job yang akan dihapus
-  detailId: null,    // ID job yang sedang dilihat detail-nya
+  editingId: null,
+  deletingId: null,
+  detailId: null,
+  currentUser: null,     // objek user Supabase yang sedang login
   filters: {
     search: '',
     status: '',
@@ -47,43 +58,331 @@ let state = {
 };
 
 /* =========================================================================
-   LOCAL STORAGE
+   SUPABASE CLIENT
    ========================================================================= */
 
-/** Menyimpan data ke localStorage */
-function saveToStorage() {
+let db = null; // instance Supabase client
+
+/** Inisialisasi Supabase client. Mengembalikan false jika belum dikonfigurasi. */
+function initSupabase() {
+  const unconfigured =
+    SUPABASE_URL === 'https://czqrfziapwiitoxfvobs.supabase.co' ||
+    SUPABASE_ANON_KEY === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cXJmemlhcHdpaXRveGZ2b2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzODc0OTUsImV4cCI6MjEwNzk2MzQ5NX0.fFat_YjU7KXJ8-GMtZy0JrcoK6a781uFMd3GH3cs7Yc' ||
+    !SUPABASE_URL.startsWith('https://') ||
+    SUPABASE_ANON_KEY.length < 20;
+
+  if (unconfigured) return false;
+
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.jobs));
+    const { createClient } = supabase;
+    db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return true;
   } catch (e) {
-    showToast('Gagal menyimpan data ke penyimpanan lokal.', 'error');
+    console.error('Gagal inisialisasi Supabase:', e);
+    return false;
   }
 }
 
-/** Memuat data dari localStorage */
-function loadFromStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    // Validasi: harus berupa array
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch (e) {
-    // Data rusak — abaikan dan mulai kosong
+/* =========================================================================
+   SUPABASE: JOBS DATABASE
+   ========================================================================= */
+
+/** Ambil semua jobs milik user yang sedang login */
+async function fetchJobs() {
+  const { data, error } = await db
+    .from('jobs')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    showToast('Gagal memuat data lamaran.', 'error');
+    console.error(error);
     return [];
   }
+  // Normalisasi nama kolom snake_case → camelCase untuk kompatibilitas UI
+  return (data || []).map(normalizeJob);
+}
+
+/** Simpan job baru ke Supabase */
+async function insertJob(jobData) {
+  const { data, error } = await db
+    .from('jobs')
+    .insert(toDbRow(jobData))
+    .select()
+    .single();
+
+  if (error) {
+    showToast('Gagal menyimpan lamaran.', 'error');
+    console.error(error);
+    return null;
+  }
+  return normalizeJob(data);
+}
+
+/** Perbarui job yang ada di Supabase */
+async function updateJob(jobId, jobData) {
+  const { data, error } = await db
+    .from('jobs')
+    .update(toDbRow(jobData))
+    .eq('id', jobId)
+    .select()
+    .single();
+
+  if (error) {
+    showToast('Gagal memperbarui lamaran.', 'error');
+    console.error(error);
+    return null;
+  }
+  return normalizeJob(data);
+}
+
+/** Hapus job dari Supabase */
+async function deleteJob(jobId) {
+  const { error } = await db
+    .from('jobs')
+    .delete()
+    .eq('id', jobId);
+
+  if (error) {
+    showToast('Gagal menghapus lamaran.', 'error');
+    console.error(error);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Konversi objek JS (camelCase) ke baris database (snake_case).
+ * Field user_id diambil otomatis dari session aktif.
+ */
+function toDbRow(job) {
+  return {
+    user_id:    state.currentUser.id,
+    company:    job.company,
+    position:   job.position,
+    location:   job.location   || null,
+    type:       job.type       || null,
+    status:     job.status     || 'Applied',
+    apply_date: job.applyDate  || null,
+    deadline:   job.deadline   || null,
+    salary:     job.salary     || null,
+    source:     job.source     || null,
+    notes:      job.notes      || null,
+  };
+}
+
+/**
+ * Konversi baris database (snake_case) ke objek JS (camelCase).
+ */
+function normalizeJob(row) {
+  return {
+    id:        row.id,
+    company:   row.company,
+    position:  row.position,
+    location:  row.location   || '',
+    type:      row.type       || '',
+    status:    row.status     || 'Applied',
+    applyDate: row.apply_date || '',
+    deadline:  row.deadline   || '',
+    salary:    row.salary     || '',
+    source:    row.source     || '',
+    notes:     row.notes      || '',
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+/* =========================================================================
+   SUPABASE: AUTENTIKASI
+   ========================================================================= */
+
+/** Daftar akun baru dengan email + password */
+async function signUp(name, email, password) {
+  const { data, error } = await db.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: name } },
+  });
+
+  if (error) return { error: error.message };
+  if (data.user && !data.session) {
+    // Supabase mengirim email konfirmasi
+    return { needsConfirmation: true };
+  }
+  return { user: data.user };
+}
+
+/** Login dengan email + password */
+async function signIn(email, password) {
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
+  if (error) return { error: error.message };
+  return { user: data.user };
+}
+
+/** Logout */
+async function signOut() {
+  await db.auth.signOut();
+  state.currentUser = null;
+  state.jobs = [];
+  showAuthPage();
+}
+
+/* =========================================================================
+   UI: HALAMAN AUTH vs APP
+   ========================================================================= */
+
+function showLoadingScreen() {
+  document.getElementById('loading-screen').classList.remove('hidden');
+}
+
+function hideLoadingScreen() {
+  document.getElementById('loading-screen').classList.add('hidden');
+}
+
+function showAuthPage() {
+  document.getElementById('auth-page').classList.remove('hidden');
+  document.getElementById('app-wrapper').classList.add('hidden');
+  hideLoadingScreen();
+  // Reset form
+  document.getElementById('login-form').reset();
+  document.getElementById('register-form').reset();
+  clearAuthErrors();
+}
+
+function showAppPage() {
+  document.getElementById('auth-page').classList.add('hidden');
+  document.getElementById('app-wrapper').classList.remove('hidden');
+  hideLoadingScreen();
+}
+
+function clearAuthErrors() {
+  ['err-login-email','err-login-password','err-login-global',
+   'err-register-name','err-register-email','err-register-password','err-register-global']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '';
+    });
+  ['login-email','login-password','register-name','register-email','register-password']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('input-error');
+    });
+}
+
+/** Tampilkan info user yang login di sidebar */
+function renderUserInfo(user) {
+  const name  = user.user_metadata?.full_name || user.email.split('@')[0];
+  const email = user.email;
+  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+
+  document.getElementById('user-name').textContent    = sanitize(name);
+  document.getElementById('user-email').textContent   = sanitize(email);
+  document.getElementById('user-avatar').textContent  = initials;
+  document.getElementById('welcome-heading').textContent = `Halo, ${sanitize(name.split(' ')[0])}! 👋`;
+}
+
+/* =========================================================================
+   AUTH: FORM HANDLERS
+   ========================================================================= */
+
+function setAuthLoading(formType, loading) {
+  const btn     = document.getElementById(`btn-${formType}`);
+  const text    = document.getElementById(`btn-${formType}-text`);
+  const spinner = document.getElementById(`btn-${formType}-spinner`);
+  btn.disabled  = loading;
+  text.textContent = loading
+    ? (formType === 'login' ? 'Memuat…' : 'Membuat akun…')
+    : (formType === 'login' ? 'Masuk' : 'Buat Akun');
+  spinner.classList.toggle('hidden', !loading);
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  clearAuthErrors();
+
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  let valid = true;
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    document.getElementById('login-email').classList.add('input-error');
+    document.getElementById('err-login-email').textContent = 'Masukkan email yang valid.';
+    valid = false;
+  }
+  if (!password) {
+    document.getElementById('login-password').classList.add('input-error');
+    document.getElementById('err-login-password').textContent = 'Kata sandi tidak boleh kosong.';
+    valid = false;
+  }
+  if (!valid) return;
+
+  setAuthLoading('login', true);
+  const result = await signIn(email, password);
+  setAuthLoading('login', false);
+
+  if (result.error) {
+    document.getElementById('err-login-global').textContent =
+      result.error.includes('Invalid login') || result.error.includes('invalid_credentials')
+        ? 'Email atau kata sandi salah.'
+        : result.error;
+    return;
+  }
+
+  // Login berhasil — onAuthStateChange akan menangani transisi
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  clearAuthErrors();
+
+  const name     = document.getElementById('register-name').value.trim();
+  const email    = document.getElementById('register-email').value.trim();
+  const password = document.getElementById('register-password').value;
+  let valid = true;
+
+  if (!name) {
+    document.getElementById('register-name').classList.add('input-error');
+    document.getElementById('err-register-name').textContent = 'Nama lengkap wajib diisi.';
+    valid = false;
+  }
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    document.getElementById('register-email').classList.add('input-error');
+    document.getElementById('err-register-email').textContent = 'Masukkan email yang valid.';
+    valid = false;
+  }
+  if (!password || password.length < 6) {
+    document.getElementById('register-password').classList.add('input-error');
+    document.getElementById('err-register-password').textContent = 'Kata sandi minimal 6 karakter.';
+    valid = false;
+  }
+  if (!valid) return;
+
+  setAuthLoading('register', true);
+  const result = await signUp(name, email, password);
+  setAuthLoading('register', false);
+
+  if (result.error) {
+    document.getElementById('err-register-global').textContent =
+      result.error.includes('already registered') || result.error.includes('already been registered')
+        ? 'Email ini sudah terdaftar. Silakan masuk.'
+        : result.error;
+    return;
+  }
+
+  if (result.needsConfirmation) {
+    document.getElementById('err-register-global').style.color = 'var(--color-success)';
+    document.getElementById('err-register-global').textContent =
+      '✓ Cek email Anda untuk konfirmasi akun, lalu masuk.';
+    return;
+  }
+
+  // Registrasi + auto-login berhasil — onAuthStateChange akan menangani transisi
 }
 
 /* =========================================================================
    DATA HELPERS
    ========================================================================= */
 
-/** Membuat ID unik sederhana */
-function generateId() {
-  return 'job_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
-}
-
-/** Sanitasi teks pengguna untuk textContent (aman dari XSS) */
+/** Sanitasi teks pengguna (mencegah XSS) */
 function sanitize(str) {
   return (str || '').toString().trim();
 }
@@ -112,13 +411,13 @@ function daysFromNow(dateStr) {
 function deadlineInfo(dateStr) {
   if (!dateStr) return { text: 'Tidak ada', cls: 'deadline-none' };
   const days = daysFromNow(dateStr);
-  if (days < 0)  return { text: `Lewat ${Math.abs(days)} hari`, cls: 'deadline-passed' };
-  if (days === 0) return { text: 'Hari ini!', cls: 'deadline-near' };
-  if (days <= 7)  return { text: `${days} hari lagi`, cls: 'deadline-near' };
+  if (days < 0)   return { text: `Lewat ${Math.abs(days)} hari`, cls: 'deadline-passed' };
+  if (days === 0) return { text: 'Hari ini!',                    cls: 'deadline-near' };
+  if (days <= 7)  return { text: `${days} hari lagi`,            cls: 'deadline-near' };
   return { text: formatDate(dateStr), cls: 'deadline-ok' };
 }
 
-/** Mengambil 1–2 huruf inisial perusahaan untuk logo */
+/** Mengambil 1–2 huruf inisial perusahaan */
 function getInitials(name) {
   const words = sanitize(name).split(/\s+/).filter(Boolean);
   if (words.length === 0) return '?';
@@ -126,7 +425,7 @@ function getInitials(name) {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-/** Mendapatkan badge HTML untuk status */
+/** Badge HTML untuk status */
 function statusBadgeHTML(status) {
   const cfg = STATUS_CONFIG[status] || { label: status, badge: 'badge-saved' };
   const span = document.createElement('span');
@@ -140,23 +439,22 @@ function statusBadgeHTML(status) {
    ========================================================================= */
 
 function computeStats() {
-  const jobs = state.jobs;
   return {
-    total:     jobs.length,
-    applied:   jobs.filter(j => j.status === 'Applied').length,
-    interview: jobs.filter(j => j.status === 'Interview').length,
-    offered:   jobs.filter(j => j.status === 'Offered').length,
-    rejected:  jobs.filter(j => j.status === 'Rejected').length,
+    total:     state.jobs.length,
+    applied:   state.jobs.filter(j => j.status === 'Applied').length,
+    interview: state.jobs.filter(j => j.status === 'Interview').length,
+    offered:   state.jobs.filter(j => j.status === 'Offered').length,
+    rejected:  state.jobs.filter(j => j.status === 'Rejected').length,
   };
 }
 
 function renderStats() {
   const s = computeStats();
-  document.getElementById('stat-total').textContent    = s.total;
-  document.getElementById('stat-applied').textContent  = s.applied;
+  document.getElementById('stat-total').textContent     = s.total;
+  document.getElementById('stat-applied').textContent   = s.applied;
   document.getElementById('stat-interview').textContent = s.interview;
-  document.getElementById('stat-offered').textContent  = s.offered;
-  document.getElementById('stat-rejected').textContent = s.rejected;
+  document.getElementById('stat-offered').textContent   = s.offered;
+  document.getElementById('stat-rejected').textContent  = s.rejected;
 }
 
 /* =========================================================================
@@ -168,35 +466,27 @@ function getFilteredJobs() {
   const q = search.toLowerCase().trim();
 
   let jobs = state.jobs.filter(job => {
-    // Pencarian teks (nama perusahaan atau posisi)
     if (q) {
       const inCompany  = job.company.toLowerCase().includes(q);
       const inPosition = job.position.toLowerCase().includes(q);
       if (!inCompany && !inPosition) return false;
     }
-    // Filter status
     if (status && job.status !== status) return false;
-    // Filter jenis pekerjaan
     if (type && job.type !== type) return false;
     return true;
   });
 
-  // Pengurutan
   jobs = [...jobs].sort((a, b) => {
     switch (sort) {
-      case 'newest':
-        return (b.createdAt || 0) - (a.createdAt || 0);
-      case 'oldest':
-        return (a.createdAt || 0) - (b.createdAt || 0);
+      case 'newest':   return (b.createdAt || 0) - (a.createdAt || 0);
+      case 'oldest':   return (a.createdAt || 0) - (b.createdAt || 0);
       case 'deadline': {
         const da = a.deadline ? new Date(a.deadline).getTime() : Infinity;
         const db = b.deadline ? new Date(b.deadline).getTime() : Infinity;
         return da - db;
       }
-      case 'company':
-        return a.company.localeCompare(b.company, 'id');
-      default:
-        return 0;
+      case 'company':  return a.company.localeCompare(b.company, 'id');
+      default:         return 0;
     }
   });
 
@@ -210,14 +500,10 @@ function getFilteredJobs() {
 function renderApplications() {
   const container = document.getElementById('applications-list');
   const jobs = getFilteredJobs();
-
   container.innerHTML = '';
 
-  // Hitung hasil
   const countEl = document.getElementById('results-count');
-  if (countEl) {
-    countEl.textContent = `${jobs.length} lamaran ditemukan`;
-  }
+  if (countEl) countEl.textContent = `${jobs.length} lamaran ditemukan`;
 
   if (jobs.length === 0) {
     const hasFilters = state.filters.search || state.filters.status || state.filters.type;
@@ -225,9 +511,7 @@ function renderApplications() {
     return;
   }
 
-  jobs.forEach(job => {
-    container.appendChild(buildJobCard(job));
-  });
+  jobs.forEach(job => container.appendChild(buildJobCard(job)));
 }
 
 /** Membangun elemen kartu pekerjaan */
@@ -249,15 +533,12 @@ function buildJobCard(job) {
 
   const titleWrap = document.createElement('div');
   titleWrap.className = 'job-card-title-wrap';
-
   const position = document.createElement('div');
   position.className = 'job-position';
   position.textContent = sanitize(job.position);
-
   const company = document.createElement('div');
   company.className = 'job-company';
   company.textContent = sanitize(job.company);
-
   titleWrap.append(position, company);
   header.append(logo, titleWrap, statusBadgeHTML(job.status));
 
@@ -269,24 +550,20 @@ function buildJobCard(job) {
     const loc = document.createElement('span');
     loc.className = 'meta-item';
     loc.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
-    const locText = document.createTextNode(sanitize(job.location));
-    loc.appendChild(locText);
+    loc.appendChild(document.createTextNode(sanitize(job.location)));
     meta.appendChild(loc);
   }
-
   if (job.type) {
     const type = document.createElement('span');
     type.className = 'badge badge-type';
     type.textContent = sanitize(job.type);
     meta.appendChild(type);
   }
-
   if (job.applyDate) {
     const date = document.createElement('span');
     date.className = 'meta-item';
     date.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
-    const dateText = document.createTextNode(formatDate(job.applyDate));
-    date.appendChild(dateText);
+    date.appendChild(document.createTextNode(formatDate(job.applyDate)));
     meta.appendChild(date);
   }
 
@@ -298,14 +575,9 @@ function buildJobCard(job) {
   const deadlineEl = document.createElement('span');
   deadlineEl.className = `text-muted deadline-text ${dl.cls}`;
   deadlineEl.style.fontSize = '0.78rem';
+  deadlineEl.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;margin-right:3px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+  deadlineEl.appendChild(document.createTextNode(dl.text));
 
-  const dlIcon = document.createElement('span');
-  dlIcon.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;margin-right:3px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-  deadlineEl.append(dlIcon);
-  const dlText = document.createTextNode(dl.text);
-  deadlineEl.appendChild(dlText);
-
-  // Action buttons
   const actions = document.createElement('div');
   actions.className = 'job-card-actions';
 
@@ -325,13 +597,9 @@ function buildJobCard(job) {
   footer.append(deadlineEl, actions);
   card.append(header, meta, footer);
 
-  // Klik kartu untuk detail
   card.addEventListener('click', () => openDetailModal(job.id));
   card.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      openDetailModal(job.id);
-    }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetailModal(job.id); }
   });
 
   return card;
@@ -345,8 +613,7 @@ function buildEmptyState(message) {
     <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#C8DFDB">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
       <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/>
-      <line x1="16" y1="17" x2="8" y2="17"/>
+      <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
       <polyline points="10 9 9 9 8 9"/>
     </svg>
     <h3>${message || 'Belum ada lamaran'}</h3>
@@ -363,7 +630,7 @@ function buildEmptyState(message) {
 }
 
 /* =========================================================================
-   RENDER: DASHBOARD (RECENT)
+   RENDER: DASHBOARD
    ========================================================================= */
 
 function renderDashboard() {
@@ -386,8 +653,7 @@ function renderRecentList() {
     empty.innerHTML = `
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:#C8DFDB">
         <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
+        <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
       <h3>Belum ada lamaran</h3>
       <p>Tambahkan lamaran pertama Anda untuk mulai melacak progres.</p>
@@ -446,14 +712,11 @@ function openDetailModal(jobId) {
   const content = document.getElementById('detail-content');
   content.innerHTML = '';
 
-  // Header
   const header = document.createElement('div');
   header.className = 'detail-header';
-
   const logo = document.createElement('div');
   logo.className = 'detail-logo';
   logo.textContent = getInitials(job.company);
-
   const titleWrap = document.createElement('div');
   const posEl = document.createElement('div');
   posEl.className = 'detail-position';
@@ -468,7 +731,6 @@ function openDetailModal(jobId) {
   header.append(logo, titleWrap);
   content.appendChild(header);
 
-  // Grid fields
   const grid = document.createElement('div');
   grid.className = 'detail-grid';
 
@@ -493,36 +755,24 @@ function openDetailModal(jobId) {
   }
 
   const dl = deadlineInfo(job.deadline);
-  const deadlineText = job.deadline ? `${formatDate(job.deadline)} (${dl.text})` : '—';
-
-  addField('Lokasi',          job.location);
-  addField('Jenis Pekerjaan', job.type);
-  addField('Tanggal Lamaran', formatDate(job.applyDate));
-  addField('Tenggat Waktu',   deadlineText);
-  addField('Kisaran Gaji',    job.salary);
-  addField('Sumber / URL',    job.source, false, true);
+  addField('Lokasi',         job.location);
+  addField('Jenis Pekerjaan',job.type);
+  addField('Tanggal Lamaran',formatDate(job.applyDate));
+  addField('Tenggat Waktu',  job.deadline ? `${formatDate(job.deadline)} (${dl.text})` : '—');
+  addField('Kisaran Gaji',   job.salary);
+  addField('Sumber / URL',   job.source, false, true);
   if (job.notes) addField('Catatan', job.notes, true);
 
   content.appendChild(grid);
 
-  // Footer meta
   const createdEl = document.createElement('p');
   createdEl.className = 'text-muted';
-  createdEl.style.marginTop = '16px';
-  createdEl.style.fontSize = '0.75rem';
-  const createdDate = job.createdAt ? new Date(job.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-  createdEl.textContent = `Ditambahkan: ${createdDate}`;
+  createdEl.style.cssText = 'margin-top:16px;font-size:0.75rem';
+  createdEl.textContent = `Ditambahkan: ${job.createdAt ? new Date(job.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}`;
   content.appendChild(createdEl);
 
-  // Wire detail modal buttons
-  document.getElementById('detail-edit-btn').onclick = () => {
-    closeDetailModal();
-    openEditModal(jobId);
-  };
-  document.getElementById('detail-delete-btn').onclick = () => {
-    closeDetailModal();
-    confirmDelete(jobId);
-  };
+  document.getElementById('detail-edit-btn').onclick = () => { closeDetailModal(); openEditModal(jobId); };
+  document.getElementById('detail-delete-btn').onclick = () => { closeDetailModal(); confirmDelete(jobId); };
 
   document.getElementById('detail-modal').classList.remove('hidden');
   trapFocus(document.getElementById('detail-modal'));
@@ -539,10 +789,9 @@ function closeDetailModal() {
 
 function openAddModal() {
   state.editingId = null;
-  document.getElementById('modal-title').textContent = 'Tambah Pekerjaan';
-  document.getElementById('btn-submit').textContent = 'Simpan';
+  document.getElementById('modal-title').textContent     = 'Tambah Pekerjaan';
+  document.getElementById('btn-submit-text').textContent = 'Simpan';
   resetForm();
-  // Isi tanggal hari ini sebagai default
   document.getElementById('form-apply-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('form-status').value = 'Applied';
   openModal();
@@ -552,12 +801,9 @@ function openEditModal(jobId) {
   const job = state.jobs.find(j => j.id === jobId);
   if (!job) return;
   state.editingId = jobId;
-
-  document.getElementById('modal-title').textContent = 'Edit Lamaran';
-  document.getElementById('btn-submit').textContent = 'Perbarui';
+  document.getElementById('modal-title').textContent     = 'Edit Lamaran';
+  document.getElementById('btn-submit-text').textContent = 'Perbarui';
   resetForm();
-
-  // Isi form dengan data yang ada
   document.getElementById('form-id').value         = job.id;
   document.getElementById('form-company').value    = sanitize(job.company);
   document.getElementById('form-position').value   = sanitize(job.position);
@@ -569,14 +815,12 @@ function openEditModal(jobId) {
   document.getElementById('form-salary').value     = sanitize(job.salary);
   document.getElementById('form-source').value     = sanitize(job.source);
   document.getElementById('form-notes').value      = sanitize(job.notes);
-
   openModal();
 }
 
 function openModal() {
   document.getElementById('job-modal').classList.remove('hidden');
   trapFocus(document.getElementById('job-modal'));
-  // Fokus ke input pertama
   setTimeout(() => document.getElementById('form-company').focus(), 50);
 }
 
@@ -587,18 +831,17 @@ function closeModal() {
 }
 
 function resetForm() {
-  const form = document.getElementById('job-form');
-  form.reset();
+  document.getElementById('job-form').reset();
   document.getElementById('form-id').value = '';
   clearFormErrors();
 }
 
 function clearFormErrors() {
-  ['form-company', 'form-position', 'form-source'].forEach(id => {
-    const input = document.getElementById(id);
-    if (input) input.classList.remove('input-error');
+  ['form-company','form-position','form-source'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('input-error');
   });
-  ['err-company', 'err-position', 'err-source'].forEach(id => {
+  ['err-company','err-position','err-source'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = '';
   });
@@ -620,17 +863,14 @@ function validateForm() {
     showFieldError('form-company', 'err-company', 'Nama perusahaan wajib diisi.');
     valid = false;
   }
-
   if (!position) {
     showFieldError('form-position', 'err-position', 'Posisi pekerjaan wajib diisi.');
     valid = false;
   }
-
   if (source && !/^https?:\/\/.+/.test(source)) {
     showFieldError('form-source', 'err-source', 'URL harus diawali dengan https:// atau http://');
     valid = false;
   }
-
   return valid;
 }
 
@@ -642,9 +882,19 @@ function showFieldError(inputId, errId, message) {
   if (input) input.focus();
 }
 
-function handleFormSubmit(e) {
-  e.preventDefault();
+function setSubmitLoading(loading) {
+  const btn     = document.getElementById('btn-submit');
+  const text    = document.getElementById('btn-submit-text');
+  const spinner = document.getElementById('btn-submit-spinner');
+  btn.disabled  = loading;
+  spinner.classList.toggle('hidden', !loading);
+  if (!loading) {
+    text.textContent = state.editingId ? 'Perbarui' : 'Simpan';
+  }
+}
 
+async function handleFormSubmit(e) {
+  e.preventDefault();
   if (!validateForm()) return;
 
   const jobData = {
@@ -660,26 +910,25 @@ function handleFormSubmit(e) {
     notes:     document.getElementById('form-notes').value.trim(),
   };
 
+  setSubmitLoading(true);
+
   if (state.editingId) {
     // UPDATE
+    const updated = await updateJob(state.editingId, jobData);
+    setSubmitLoading(false);
+    if (!updated) return;
     const idx = state.jobs.findIndex(j => j.id === state.editingId);
-    if (idx !== -1) {
-      state.jobs[idx] = { ...state.jobs[idx], ...jobData };
-    }
+    if (idx !== -1) state.jobs[idx] = updated;
     showToast('Lamaran berhasil diperbarui!', 'success');
   } else {
     // CREATE
-    const newJob = {
-      id: generateId(),
-      createdAt: Date.now(),
-      isSample: false,
-      ...jobData,
-    };
-    state.jobs.unshift(newJob);
+    const created = await insertJob(jobData);
+    setSubmitLoading(false);
+    if (!created) return;
+    state.jobs.unshift(created);
     showToast('Lamaran berhasil ditambahkan!', 'success');
   }
 
-  saveToStorage();
   closeModal();
   refreshUI();
 }
@@ -695,13 +944,20 @@ function confirmDelete(jobId) {
   setTimeout(() => document.getElementById('confirm-cancel').focus(), 50);
 }
 
-function executeDelete() {
+async function executeDelete() {
   if (!state.deletingId) return;
   const job = state.jobs.find(j => j.id === state.deletingId);
+
+  // Disable tombol sementara
+  document.getElementById('confirm-ok').disabled = true;
+  const ok = await deleteJob(state.deletingId);
+  document.getElementById('confirm-ok').disabled = false;
+
+  if (!ok) return;
+
   state.jobs = state.jobs.filter(j => j.id !== state.deletingId);
   state.deletingId = null;
   document.getElementById('confirm-modal').classList.add('hidden');
-  saveToStorage();
   refreshUI();
   showToast(`Lamaran "${job ? sanitize(job.position) : ''}" dihapus.`, 'info');
 }
@@ -718,25 +974,21 @@ function cancelDelete() {
 function switchView(view) {
   state.currentView = view;
 
-  // Update nav items
   document.querySelectorAll('.nav-item').forEach(btn => {
     const active = btn.dataset.view === view;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   });
 
-  // Show/hide views
-  document.getElementById('view-dashboard').classList.toggle('hidden', view !== 'dashboard');
+  document.getElementById('view-dashboard').classList.toggle('hidden',    view !== 'dashboard');
   document.getElementById('view-applications').classList.toggle('hidden', view !== 'applications');
 
-  // Update topbar title
   const titles = { dashboard: 'Dasbor', applications: 'Lamaran Saya' };
   document.getElementById('topbar-title').textContent = titles[view] || 'Track Jobs';
 
-  // Close mobile sidebar
   closeMobileSidebar();
 
-  if (view === 'dashboard') renderDashboard();
+  if (view === 'dashboard')    renderDashboard();
   if (view === 'applications') renderApplications();
 }
 
@@ -745,36 +997,24 @@ function switchView(view) {
    ========================================================================= */
 
 function openMobileSidebar() {
-  const sidebar  = document.getElementById('sidebar');
-  const overlay  = document.getElementById('sidebar-overlay');
-  const toggle   = document.getElementById('menu-toggle');
-  sidebar.classList.add('open');
-  overlay.classList.add('active');
-  overlay.setAttribute('aria-hidden', 'false');
-  toggle.setAttribute('aria-expanded', 'true');
-  // Fokus ke tombol tutup
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-overlay').classList.add('active');
+  document.getElementById('sidebar-overlay').setAttribute('aria-hidden', 'false');
+  document.getElementById('menu-toggle').setAttribute('aria-expanded', 'true');
   setTimeout(() => document.getElementById('sidebar-close').focus(), 50);
 }
 
 function closeMobileSidebar() {
-  const sidebar  = document.getElementById('sidebar');
-  const overlay  = document.getElementById('sidebar-overlay');
-  const toggle   = document.getElementById('menu-toggle');
-  sidebar.classList.remove('open');
-  overlay.classList.remove('active');
-  overlay.setAttribute('aria-hidden', 'true');
-  toggle.setAttribute('aria-expanded', 'false');
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('active');
+  document.getElementById('sidebar-overlay').setAttribute('aria-hidden', 'true');
+  document.getElementById('menu-toggle').setAttribute('aria-expanded', 'false');
 }
 
 /* =========================================================================
    TOAST NOTIFICATIONS
    ========================================================================= */
 
-/**
- * Menampilkan notifikasi toast
- * @param {string} message - Pesan yang ditampilkan
- * @param {'success'|'error'|'info'} type - Tipe notifikasi
- */
 function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
   const toast = document.createElement('div');
@@ -791,17 +1031,10 @@ function showToast(message, type = 'info') {
   const msgSpan = document.createElement('span');
   msgSpan.textContent = message;
   toast.appendChild(msgSpan);
-
   container.appendChild(toast);
 
-  // Auto-dismiss setelah 3.5 detik
   const timer = setTimeout(() => dismissToast(toast), 3500);
-
-  // Klik untuk menutup lebih awal
-  toast.addEventListener('click', () => {
-    clearTimeout(timer);
-    dismissToast(toast);
-  });
+  toast.addEventListener('click', () => { clearTimeout(timer); dismissToast(toast); });
 }
 
 function dismissToast(toast) {
@@ -813,35 +1046,23 @@ function dismissToast(toast) {
    ACCESSIBILITY: FOCUS TRAP
    ========================================================================= */
 
-/**
- * Menjebak fokus keyboard di dalam elemen dialog
- * @param {HTMLElement} element
- */
 function trapFocus(element) {
   const focusable = element.querySelectorAll(
     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
   );
   if (focusable.length === 0) return;
-
   const first = focusable[0];
   const last  = focusable[focusable.length - 1];
 
   function handleTab(e) {
     if (e.key !== 'Tab') return;
     if (e.shiftKey) {
-      if (document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      }
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
     } else {
-      if (document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
     }
   }
 
-  // Hapus listener lama jika ada
   element.removeEventListener('keydown', element._trapFocusHandler);
   element._trapFocusHandler = handleTab;
   element.addEventListener('keydown', handleTab);
@@ -854,8 +1075,20 @@ function trapFocus(element) {
 function refreshUI() {
   if (state.currentView === 'dashboard') renderDashboard();
   else renderApplications();
-  // Selalu perbarui statistik
   renderStats();
+}
+
+/* =========================================================================
+   RESULTS COUNT ELEMENT
+   ========================================================================= */
+
+function injectResultsCount() {
+  const toolbar = document.querySelector('.toolbar');
+  if (!toolbar || document.getElementById('results-count')) return;
+  const el = document.createElement('div');
+  el.id = 'results-count';
+  el.className = 'results-count';
+  toolbar.after(el);
 }
 
 /* =========================================================================
@@ -863,17 +1096,55 @@ function refreshUI() {
    ========================================================================= */
 
 function registerEventListeners() {
+  // ── Auth tabs ──────────────────────────────────────────────────────────
+  document.getElementById('tab-login').addEventListener('click', () => {
+    document.getElementById('tab-login').classList.add('active');
+    document.getElementById('tab-login').setAttribute('aria-selected', 'true');
+    document.getElementById('tab-register').classList.remove('active');
+    document.getElementById('tab-register').setAttribute('aria-selected', 'false');
+    document.getElementById('panel-login').classList.remove('hidden');
+    document.getElementById('panel-register').classList.add('hidden');
+    clearAuthErrors();
+  });
+
+  document.getElementById('tab-register').addEventListener('click', () => {
+    document.getElementById('tab-register').classList.add('active');
+    document.getElementById('tab-register').setAttribute('aria-selected', 'true');
+    document.getElementById('tab-login').classList.remove('active');
+    document.getElementById('tab-login').setAttribute('aria-selected', 'false');
+    document.getElementById('panel-register').classList.remove('hidden');
+    document.getElementById('panel-login').classList.add('hidden');
+    clearAuthErrors();
+  });
+
+  // ── Auth forms ─────────────────────────────────────────────────────────
+  document.getElementById('login-form').addEventListener('submit', handleLogin);
+  document.getElementById('register-form').addEventListener('submit', handleRegister);
+
+  // ── Password toggle visibility ─────────────────────────────────────────
+  document.querySelectorAll('.btn-toggle-pw').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.target);
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+      btn.setAttribute('aria-label',
+        input.type === 'password' ? 'Tampilkan kata sandi' : 'Sembunyikan kata sandi'
+      );
+    });
+  });
+
+  // ── Logout ─────────────────────────────────────────────────────────────
+  document.getElementById('btn-logout').addEventListener('click', signOut);
+
   // ── Sidebar & navigation ───────────────────────────────────────────────
   document.getElementById('menu-toggle').addEventListener('click', openMobileSidebar);
   document.getElementById('sidebar-close').addEventListener('click', closeMobileSidebar);
   document.getElementById('sidebar-overlay').addEventListener('click', closeMobileSidebar);
 
-  // Nav items
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
 
-  // "Lihat Semua" link di dashboard
   document.querySelectorAll('[data-view]').forEach(btn => {
     if (!btn.classList.contains('nav-item')) {
       btn.addEventListener('click', () => switchView(btn.dataset.view));
@@ -889,26 +1160,20 @@ function registerEventListeners() {
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('btn-cancel').addEventListener('click', closeModal);
 
-  // Tutup modal dengan Escape
+  // ── Escape key ─────────────────────────────────────────────────────────
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (!document.getElementById('job-modal').classList.contains('hidden'))     closeModal();
       if (!document.getElementById('detail-modal').classList.contains('hidden'))  closeDetailModal();
       if (!document.getElementById('confirm-modal').classList.contains('hidden')) cancelDelete();
-      if (document.getElementById('sidebar').classList.contains('open')) closeMobileSidebar();
+      if (document.getElementById('sidebar').classList.contains('open'))          closeMobileSidebar();
     }
   });
 
-  // Klik di luar modal-box untuk menutup (overlay)
-  document.getElementById('job-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeModal();
-  });
-  document.getElementById('detail-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeDetailModal();
-  });
-  document.getElementById('confirm-modal').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) cancelDelete();
-  });
+  // ── Klik di luar modal-box ─────────────────────────────────────────────
+  document.getElementById('job-modal').addEventListener('click',     (e) => { if (e.target === e.currentTarget) closeModal(); });
+  document.getElementById('detail-modal').addEventListener('click',  (e) => { if (e.target === e.currentTarget) closeDetailModal(); });
+  document.getElementById('confirm-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) cancelDelete(); });
 
   // ── Detail modal ────────────────────────────────────────────────────────
   document.getElementById('detail-modal-close').addEventListener('click', closeDetailModal);
@@ -922,17 +1187,14 @@ function registerEventListeners() {
     state.filters.search = e.target.value;
     renderApplications();
   });
-
   document.getElementById('filter-status').addEventListener('change', (e) => {
     state.filters.status = e.target.value;
     renderApplications();
   });
-
   document.getElementById('filter-type').addEventListener('change', (e) => {
     state.filters.type = e.target.value;
     renderApplications();
   });
-
   document.getElementById('sort-by').addEventListener('change', (e) => {
     state.filters.sort = e.target.value;
     renderApplications();
@@ -940,37 +1202,100 @@ function registerEventListeners() {
 }
 
 /* =========================================================================
-   RESULTS COUNT ELEMENT (injected dynamically)
-   ========================================================================= */
-
-function injectResultsCount() {
-  const toolbar = document.querySelector('.toolbar');
-  if (!toolbar) return;
-  if (!document.getElementById('results-count')) {
-    const el = document.createElement('div');
-    el.id = 'results-count';
-    el.className = 'results-count';
-    toolbar.after(el);
-  }
-}
-
-/* =========================================================================
    INIT
    ========================================================================= */
 
-function init() {
-  // Muat data dari localStorage
-  state.jobs = loadFromStorage();
+async function init() {
+  showLoadingScreen();
 
-  // Inject results count
-  injectResultsCount();
+  // Cek apakah Supabase sudah dikonfigurasi
+  const configured = initSupabase();
+  if (!configured) {
+    document.getElementById('supabase-warning').classList.remove('hidden');
+    showAuthPage();
+    registerEventListeners();
+    injectResultsCount();
+    return;
+  }
 
   // Daftarkan semua event listener
   registerEventListeners();
+  injectResultsCount();
 
-  // Render tampilan awal
-  renderDashboard();
+  // Pantau perubahan sesi autentikasi
+  db.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session?.user) {
+      state.currentUser = session.user;
+      renderUserInfo(session.user);
+      showLoadingScreen();
+      // Muat data dari Supabase
+      state.jobs = await fetchJobs();
+      showAppPage();
+      renderDashboard();
+    } else if (event === 'SIGNED_OUT' || (!session && event === 'INITIAL_SESSION')) {
+      showAuthPage();
+    }
+  });
+
+  // Cek sesi yang sudah ada (user refresh halaman)
+  const { data: { session } } = await db.auth.getSession();
+  if (session?.user) {
+    state.currentUser = session.user;
+    renderUserInfo(session.user);
+    state.jobs = await fetchJobs();
+    showAppPage();
+    renderDashboard();
+  } else {
+    showAuthPage();
+  }
 }
 
 // Jalankan saat DOM siap
 document.addEventListener('DOMContentLoaded', init);
+
+/* =========================================================================
+   INSTRUKSI SETUP SUPABASE
+   ==========================================================================
+
+   1. Buat akun gratis di https://supabase.com
+
+   2. Buat project baru → pilih region terdekat (mis. Singapore)
+
+   3. Buka SQL Editor di dashboard Supabase, jalankan query berikut:
+
+      -- Buat tabel jobs
+      create table jobs (
+        id          uuid default gen_random_uuid() primary key,
+        user_id     uuid references auth.users not null,
+        company     text not null,
+        position    text not null,
+        location    text,
+        type        text,
+        status      text default 'Applied',
+        apply_date  date,
+        deadline    date,
+        salary      text,
+        source      text,
+        notes       text,
+        created_at  timestamptz default now()
+      );
+
+      -- Aktifkan Row Level Security
+      alter table jobs enable row level security;
+
+      -- Policy: setiap user hanya bisa akses data miliknya sendiri
+      create policy "Users manage own jobs" on jobs
+        for all
+        using (auth.uid() = user_id)
+        with check (auth.uid() = user_id);
+
+   4. Buka Project Settings → API:
+      - Salin "Project URL"   → tempel ke SUPABASE_URL di atas
+      - Salin "anon public"   → tempel ke SUPABASE_ANON_KEY di atas
+
+   5. (Opsional) Di Authentication → Settings:
+      - Matikan "Email Confirmations" jika ingin login langsung tanpa konfirmasi email
+
+   6. Simpan file dan buka index.html di browser — selesai!
+
+   ========================================================================= */

@@ -23,16 +23,118 @@
     }
   </script>
 
+  <!-- Supabase JS SDK via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <!-- Custom styles setelah Tailwind -->
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="bg-ivory min-h-screen">
 
+  <!-- ===================== HALAMAN AUTH (Login / Register) ===================== -->
+  <div id="auth-page" class="auth-page hidden">
+    <div class="auth-container">
+
+      <!-- Logo / Brand -->
+      <div class="auth-brand">
+        <div class="auth-logo-icon" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <path d="M8 21h8M12 17v4"/>
+          </svg>
+        </div>
+        <span class="auth-brand-name">Track Jobs</span>
+      </div>
+
+      <!-- Auth Card -->
+      <div class="auth-card">
+
+        <!-- Tab: Login / Register -->
+        <div class="auth-tabs" role="tablist">
+          <button id="tab-login" class="auth-tab active" role="tab" aria-selected="true" aria-controls="panel-login">Masuk</button>
+          <button id="tab-register" class="auth-tab" role="tab" aria-selected="false" aria-controls="panel-register">Daftar</button>
+        </div>
+
+        <!-- Panel: Login -->
+        <div id="panel-login" role="tabpanel" aria-labelledby="tab-login">
+          <p class="auth-subtitle">Selamat datang kembali! Masuk untuk melanjutkan.</p>
+          <form id="login-form" novalidate autocomplete="on">
+            <div class="form-group">
+              <label for="login-email" class="form-label">Email</label>
+              <input type="email" id="login-email" class="form-input" placeholder="nama@email.com" autocomplete="email" required />
+              <span class="form-error" id="err-login-email" role="alert"></span>
+            </div>
+            <div class="form-group">
+              <label for="login-password" class="form-label">Kata Sandi</label>
+              <div class="input-password-wrap">
+                <input type="password" id="login-password" class="form-input" placeholder="Kata sandi Anda" autocomplete="current-password" required />
+                <button type="button" class="btn-toggle-pw" data-target="login-password" aria-label="Tampilkan/sembunyikan kata sandi">
+                  <svg class="icon-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+              <span class="form-error" id="err-login-password" role="alert"></span>
+            </div>
+            <span class="form-error auth-error" id="err-login-global" role="alert"></span>
+            <button type="submit" id="btn-login" class="btn-primary btn-full auth-submit">
+              <span id="btn-login-text">Masuk</span>
+              <span id="btn-login-spinner" class="btn-spinner hidden" aria-hidden="true"></span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Panel: Register -->
+        <div id="panel-register" role="tabpanel" aria-labelledby="tab-register" class="hidden">
+          <p class="auth-subtitle">Buat akun baru untuk mulai melacak lamaran Anda.</p>
+          <form id="register-form" novalidate autocomplete="on">
+            <div class="form-group">
+              <label for="register-name" class="form-label">Nama Lengkap</label>
+              <input type="text" id="register-name" class="form-input" placeholder="Nama Anda" autocomplete="name" maxlength="80" required />
+              <span class="form-error" id="err-register-name" role="alert"></span>
+            </div>
+            <div class="form-group">
+              <label for="register-email" class="form-label">Email</label>
+              <input type="email" id="register-email" class="form-input" placeholder="nama@email.com" autocomplete="email" required />
+              <span class="form-error" id="err-register-email" role="alert"></span>
+            </div>
+            <div class="form-group">
+              <label for="register-password" class="form-label">Kata Sandi</label>
+              <div class="input-password-wrap">
+                <input type="password" id="register-password" class="form-input" placeholder="Minimal 6 karakter" autocomplete="new-password" minlength="6" required />
+                <button type="button" class="btn-toggle-pw" data-target="register-password" aria-label="Tampilkan/sembunyikan kata sandi">
+                  <svg class="icon-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+              <span class="form-error" id="err-register-password" role="alert"></span>
+            </div>
+            <span class="form-error auth-error" id="err-register-global" role="alert"></span>
+            <button type="submit" id="btn-register" class="btn-primary btn-full auth-submit">
+              <span id="btn-register-text">Buat Akun</span>
+              <span id="btn-register-spinner" class="btn-spinner hidden" aria-hidden="true"></span>
+            </button>
+          </form>
+        </div>
+
+      </div><!-- end .auth-card -->
+
+      <!-- Config notice -->
+      <p class="auth-notice">
+        Track Jobs menggunakan Supabase untuk menyimpan data Anda dengan aman.
+      </p>
+
+      <!-- Supabase not configured warning -->
+      <div id="supabase-warning" class="supabase-warning hidden">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>Supabase belum dikonfigurasi. Buka <code>script.js</code> dan isi <code>SUPABASE_URL</code> serta <code>SUPABASE_ANON_KEY</code>.</span>
+      </div>
+
+    </div><!-- end .auth-container -->
+  </div><!-- end #auth-page -->
+
   <!-- ===================== SIDEBAR OVERLAY (mobile) ===================== -->
   <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
 
   <!-- ===================== APP WRAPPER ===================== -->
-  <div class="app-wrapper">
+  <div id="app-wrapper" class="app-wrapper hidden">
 
     <!-- ============ SIDEBAR ============ -->
     <aside id="sidebar" class="sidebar" role="navigation" aria-label="Navigasi utama">
@@ -72,9 +174,25 @@
         </button>
       </nav>
 
+      <!-- User info + logout -->
+      <div class="sidebar-user">
+        <div class="user-avatar" id="user-avatar" aria-hidden="true">?</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-email" id="user-email">—</div>
+        </div>
+        <button id="btn-logout" class="btn-logout" aria-label="Keluar dari akun">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
+      </div>
+
       <!-- Sidebar footer -->
       <div class="sidebar-footer">
-        <p class="text-xs text-center opacity-60">v1.0 · IBM Bob Challenge</p>
+        <p class="text-xs text-center opacity-60">v2.0 · IBM Bob Challenge</p>
       </div>
     </aside>
 
@@ -186,7 +304,7 @@
 
       <!-- ======== VIEW: APPLICATIONS ======== -->
       <main id="view-applications" class="view-content hidden" role="main">
-        <!-- Toolbar: search + filter + sort + add -->
+        <!-- Toolbar: search + filter + sort -->
         <section class="toolbar" aria-label="Filter dan pencarian">
           <div class="search-wrap">
             <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -228,7 +346,7 @@
       </main>
 
     </div><!-- end .main-content -->
-  </div><!-- end .app-wrapper -->
+  </div><!-- end #app-wrapper -->
 
   <!-- ===================== MODAL: ADD / EDIT JOB ===================== -->
   <div id="job-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -244,26 +362,21 @@
 
       <form id="job-form" novalidate class="modal-form" autocomplete="off">
         <input type="hidden" id="form-id" />
-
         <div class="form-grid">
-          <!-- Company -->
           <div class="form-group">
             <label for="form-company" class="form-label">Nama Perusahaan <span class="required-star" aria-hidden="true">*</span></label>
             <input type="text" id="form-company" class="form-input" placeholder="mis. Google, Tokopedia…" maxlength="120" required aria-required="true" />
             <span class="form-error" id="err-company" role="alert"></span>
           </div>
-          <!-- Position -->
           <div class="form-group">
             <label for="form-position" class="form-label">Posisi Pekerjaan <span class="required-star" aria-hidden="true">*</span></label>
             <input type="text" id="form-position" class="form-input" placeholder="mis. Frontend Developer…" maxlength="120" required aria-required="true" />
             <span class="form-error" id="err-position" role="alert"></span>
           </div>
-          <!-- Location -->
           <div class="form-group">
             <label for="form-location" class="form-label">Lokasi</label>
             <input type="text" id="form-location" class="form-input" placeholder="mis. Jakarta, Remote…" maxlength="100" />
           </div>
-          <!-- Job Type -->
           <div class="form-group">
             <label for="form-type" class="form-label">Jenis Pekerjaan</label>
             <select id="form-type" class="form-input">
@@ -276,7 +389,6 @@
               <option value="Remote">Remote</option>
             </select>
           </div>
-          <!-- Status -->
           <div class="form-group">
             <label for="form-status" class="form-label">Status</label>
             <select id="form-status" class="form-input">
@@ -289,37 +401,34 @@
               <option value="Withdrawn">Ditarik Kembali</option>
             </select>
           </div>
-          <!-- Apply Date -->
           <div class="form-group">
             <label for="form-apply-date" class="form-label">Tanggal Lamaran</label>
             <input type="date" id="form-apply-date" class="form-input" />
           </div>
-          <!-- Deadline -->
           <div class="form-group">
             <label for="form-deadline" class="form-label">Tenggat Waktu</label>
             <input type="date" id="form-deadline" class="form-input" />
           </div>
-          <!-- Salary -->
           <div class="form-group">
             <label for="form-salary" class="form-label">Kisaran Gaji</label>
             <input type="text" id="form-salary" class="form-input" placeholder="mis. Rp 8 – 12 juta / bulan" maxlength="80" />
           </div>
-          <!-- Source / URL -->
           <div class="form-group form-group-full">
             <label for="form-source" class="form-label">Sumber / URL Lamaran</label>
             <input type="url" id="form-source" class="form-input" placeholder="https://…" maxlength="300" />
             <span class="form-error" id="err-source" role="alert"></span>
           </div>
-          <!-- Notes -->
           <div class="form-group form-group-full">
             <label for="form-notes" class="form-label">Catatan</label>
             <textarea id="form-notes" class="form-input form-textarea" placeholder="Informasi tambahan, kontak rekruter, tahap selanjutnya…" maxlength="500" rows="3"></textarea>
           </div>
         </div>
-
         <div class="form-actions">
           <button type="button" id="btn-cancel" class="btn-secondary">Batal</button>
-          <button type="submit" id="btn-submit" class="btn-primary">Simpan</button>
+          <button type="submit" id="btn-submit" class="btn-primary">
+            <span id="btn-submit-text">Simpan</span>
+            <span id="btn-submit-spinner" class="btn-spinner hidden" aria-hidden="true"></span>
+          </button>
         </div>
       </form>
     </div>
@@ -355,6 +464,14 @@
         <button id="confirm-cancel" class="btn-secondary">Batal</button>
         <button id="confirm-ok" class="btn-danger">Ya, Hapus</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===================== LOADING SCREEN ===================== -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-content">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <p class="loading-text">Memuat Track Jobs…</p>
     </div>
   </div>
 
