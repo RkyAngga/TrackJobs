@@ -66,10 +66,12 @@ let db = null; // instance Supabase client
 /** Inisialisasi Supabase client. Mengembalikan false jika belum dikonfigurasi. */
 function initSupabase() {
   const unconfigured =
-    SUPABASE_URL === 'https://czqrfziapwiitoxfvobs.supabase.co' ||
-    SUPABASE_ANON_KEY === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cXJmemlhcHdpaXRveGZ2b2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzODc0OTUsImV4cCI6MjEwNzk2MzQ5NX0.fFat_YjU7KXJ8-GMtZy0JrcoK6a781uFMd3GH3cs7Yc' ||
+    !SUPABASE_URL ||
+    SUPABASE_URL.includes('GANTI_') ||
     !SUPABASE_URL.startsWith('https://') ||
-    SUPABASE_ANON_KEY.length < 20;
+    !SUPABASE_ANON_KEY ||
+    SUPABASE_ANON_KEY.includes('GANTI_') ||
+    SUPABASE_ANON_KEY.length < 100;
 
   if (unconfigured) return false;
 
