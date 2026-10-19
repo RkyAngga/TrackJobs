@@ -452,11 +452,27 @@ function computeStats() {
 
 function renderStats() {
   const s = computeStats();
-  document.getElementById('stat-total').textContent     = s.total;
-  document.getElementById('stat-applied').textContent   = s.applied;
-  document.getElementById('stat-interview').textContent = s.interview;
-  document.getElementById('stat-offered').textContent   = s.offered;
-  document.getElementById('stat-rejected').textContent  = s.rejected;
+  const updates = {
+    'stat-total':     s.total,
+    'stat-applied':   s.applied,
+    'stat-interview': s.interview,
+    'stat-offered':   s.offered,
+    'stat-rejected':  s.rejected,
+  };
+  Object.entries(updates).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = parseInt(el.textContent, 10);
+    el.textContent = val;
+    // Animasi bounce hanya jika nilai berubah
+    if (prev !== val) {
+      el.classList.remove('updated');
+      // Force reflow agar animasi bisa diulang
+      void el.offsetWidth;
+      el.classList.add('updated');
+      el.addEventListener('animationend', () => el.classList.remove('updated'), { once: true });
+    }
+  });
 }
 
 /* =========================================================================
