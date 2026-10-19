@@ -171,18 +171,44 @@ async function fetchJobs() {
 
 /** Simpan job baru ke Supabase */
 async function insertJob(jobData) {
-  const { data, error } = await db
-    .from('jobs')
-    .insert(toDbRow(jobData))
-    .select()
-    .single();
-
-  if (error) {
-    showToast('Gagal menyimpan lamaran.', 'error');
-    console.error(error);
+  if (!jobData.company || !jobData.position) {
+    console.error('❌ Data tidak valid: company dan position wajib diisi');
     return null;
   }
-  return normalizeJob(data);
+
+  try {
+    const { data, error } = await db
+      .from('jobs')
+      .insert([toDbRow(jobData)])
+      .select();
+
+    if (error) {
+      console.error('❌ Supabase error:', error.message, error.code);
+      
+      // Parsing error detail
+      if (error.message.includes('foreign key')) {
+        showToast('Error: user_id tidak valid. Cek autentikasi.', 'error');
+      } else if (error.message.includes('not-null')) {
+        showToast('Error: Ada field wajib yang kosong.', 'error');
+      } else if (error.message.includes('duplicate')) {
+        showToast('Error: Data duplikat.', 'error');
+      } else {
+        showToast(`Error: ${error.message}`, 'error');
+      }
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('⚠️ Insert berhasil tapi data tidak dikembalikan');
+      return null;
+    }
+
+    return normalizeJob(data[0]);
+  } catch (e) {
+    console.error('❌ Exception di insertJob:', e);
+    showToast(`Error: ${e.message}`, 'error');
+    return null;
+  }
 }
 
 /** Perbarui job yang ada di Supabase */
@@ -222,18 +248,26 @@ async function deleteJob(jobId) {
  * Field user_id diambil otomatis dari session aktif.
  */
 function toDbRow(job) {
+  // Helper: konversi empty string ke null untuk field date
+  const toDateOrNull = (val) => {
+    if (!val || val.trim() === '' || val === 'null' || val === 'undefined') return null;
+    // Validasi format YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) return null;
+    return val;
+  };
+
   return {
     user_id:    state.currentUser.id,
-    company:    job.company,
-    position:   job.position,
-    location:   job.location   || null,
-    type:       job.type       || null,
-    status:     job.status     || 'Applied',
-    apply_date: job.applyDate  || null,
-    deadline:   job.deadline   || null,
-    salary:     job.salary     || null,
-    source:     job.source     || null,
-    notes:      job.notes      || null,
+    company:    job.company || '',
+    position:   job.position || '',
+    location:   job.location || null,
+    type:       job.type || null,
+    status:     job.status || 'Applied',
+    apply_date: toDateOrNull(job.applyDate),
+    deadline:   toDateOrNull(job.deadline),
+    salary:     job.salary || null,
+    source:     job.source || null,
+    notes:      job.notes || null,
   };
 }
 
@@ -1214,7 +1248,15 @@ function refreshUI() {
    ========================================================================= */
 
 const GEMINI_STORAGE_KEY = 'trackjobs_gemini_key';
-const GEMINI_API_URL     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// Daftar model Gemini yang dicoba berurutan jika ada yang 404/tidak ditemukan
+const GEMINI_API_ROOT = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro'
+];
 
 /** State lokal AI modal */
 const aiState = {
@@ -1314,29 +1356,41 @@ function handleImageFile(file) {
  */
 function buildGeminiPrompt() {
   const today = new Date().toISOString().split('T')[0];
-  return `Kamu adalah AI ekstraksi data lamaran kerja yang akurat.
-Ekstrak informasi pekerjaan dari konten yang diberikan dan kembalikan HANYA objek JSON valid, tanpa markdown, tanpa penjelasan, tanpa kode blok.
+  return `Kamu adalah AI ekstraksi data lowongan kerja yang AKURAT dan LENGKAP.
+Tugas: Ekstrak SEMUA lowongan kerja yang ada dalam input teks atau gambar pengguna.
 
-Format JSON yang harus dikembalikan (isi "" jika tidak ditemukan):
+ATURAN UTAMA:
+1. JIKA ADA BANYAK LOWONGAN, EKSTRAK SEMUANYA tanpa ada yang terlewat! Contoh jika ada 14 lowongan, hasilkan 14 item dalam array. JANGAN HANYA SATU!
+2. Kembalikan HANYA ARRAY JSON: [ { ... }, { ... }, ... ]
+3. TANPA pembungkus markdown (JANGAN gunakan \`\`\`json atau \`\`\`), TANPA teks basa-basi sebelum atau sesudah JSON.
+4. Setiap item lowongan WAJIB punya:
+   - "company": nama perusahaan/instansi (WAJIB ADA)
+   - "position": nama posisi/pekerjaan (WAJIB ADA)
+
+JIKA INPUT BERBENTUK LIST / CHECKLIST SEPERTI:
+"- [ ] Posisi - Nama PT" atau "- Posisi di Perusahaan":
+Pisahkan dengan tepat mana "position" dan mana "company" untuk SETIAP baris!
+Contoh:
+"Staf IT dan Timbangan (PG Rajawali I) - PT MAGNET SOLUSI INTEGRA"
+-> position: "Staf IT dan Timbangan (PG Rajawali I)"
+-> company: "PT MAGNET SOLUSI INTEGRA"
+
+Format skema untuk setiap item dalam ARRAY:
 {
-  "company": "nama perusahaan",
-  "position": "posisi/jabatan pekerjaan",
-  "location": "kota atau lokasi kerja",
-  "type": "salah satu dari: Full-time, Part-time, Internship, Contract, Freelance, Remote, atau kosong",
+  "company": "nama PT atau perusahaan",
+  "position": "nama posisi atau jabatan",
+  "location": "kota/lokasi kerja atau 'Remote'",
+  "type": "Full-time / Part-time / Internship / Contract / Freelance / Remote",
   "status": "Applied",
   "applyDate": "${today}",
-  "deadline": "format YYYY-MM-DD jika ada, kosong jika tidak",
-  "salary": "kisaran gaji dalam format teks asli, kosong jika tidak ada",
-  "source": "URL lowongan jika ada, kosong jika tidak",
-  "notes": "informasi penting lainnya seperti kualifikasi, benefit, atau kontak",
-  "confidence": "high | medium | low"
+  "deadline": "YYYY-MM-DD jika ada, jika tidak kosongkan",
+  "salary": "kisaran gaji asli jika ada, jika tidak kosongkan",
+  "source": "URL lowongan jika ada, jika tidak kosongkan",
+  "notes": "informasi penting lainnya",
+  "confidence": "high / medium / low"
 }
 
-Aturan penting:
-- Hanya kembalikan JSON, tidak ada teks lain
-- Untuk "type": gunakan kata dalam bahasa Inggris sesuai pilihan di atas
-- Untuk "deadline": jika ada tanggal, konversi ke format YYYY-MM-DD
-- Untuk "confidence": "high" jika data lengkap, "medium" jika sebagian, "low" jika minim data`;
+OUTPUT: HANYA ARRAY JSON VALID [ ... ].`;
 }
 
 async function analyzeWithGemini() {
@@ -1368,116 +1422,167 @@ async function analyzeWithGemini() {
   // Set loading state
   setAiAnalyzeLoading(true);
 
-  // Bangun request body Gemini
-  const parts = [{ text: buildGeminiPrompt() }];
-
-  if (isImage) {
-    parts.push({
-      inline_data: {
-        mime_type: aiState.imageMimeType,
-        data: aiState.imageBase64,
-      }
-    });
-  } else {
-    parts.push({ text: `\n\nKonten lowongan kerja:\n${textInput}` });
-  }
-
-  const requestBody = {
-    contents: [{ parts }],
-    generationConfig: {
-      temperature: 0.1,      // rendah = lebih deterministik
-      maxOutputTokens: 512,
-    },
-  };
-
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
+    // Bangun parts dengan urutan yang benar: prompt text DULU, baru image/text
+    const parts = [];
+    
+    // Part 1: System prompt
+    parts.push({ text: buildGeminiPrompt() });
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      const msg = errData?.error?.message || `HTTP ${response.status}`;
+    // Part 2: Konten (image atau text)
+    if (isImage) {
+      parts.push({
+        inline_data: {
+          mime_type: aiState.imageMimeType,
+          data: aiState.imageBase64,
+        }
+      });
+    } else {
+      parts.push({ text: `Konten lowongan kerja:\n${textInput}` });
+    }
+
+    const requestBody = {
+      contents: [{ 
+        parts: parts
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 8192,
+      },
+    };
+
+    console.log('🔍 Mengirim ke Gemini…');
+    console.log('Mode:', isImage ? 'GAMBAR' : 'TEKS');
+    console.log('Image Base64 length:', aiState.imageBase64?.length || 0);
+    console.log('Request body:', JSON.stringify(requestBody, null, 2));
+
+    // Ambil daftar model aktif dari API key. Hindari model statis yang sudah deprecated.
+    let availableModels = [];
+    try {
+      const modelsResponse = await fetch(`${GEMINI_API_ROOT}/models?key=${encodeURIComponent(apiKey)}`);
+      const modelsData = await modelsResponse.json();
+      if (modelsResponse.ok) {
+        availableModels = (modelsData.models || [])
+          .filter(model => (model.supportedGenerationMethods || []).includes('generateContent'))
+          .map(model => model.name.replace(/^models\//, ''));
+      }
+    } catch (listError) {
+      console.warn('Gagal mengambil daftar model:', listError);
+    }
+
+    // Prioritaskan model yang dikenal; fallback ke model apa pun yang support generateContent.
+    const modelsToTry = [
+      ...GEMINI_MODELS.filter(model => availableModels.includes(model)),
+      ...availableModels.filter(model => !GEMINI_MODELS.includes(model)),
+    ];
+
+    if (modelsToTry.length === 0) {
+      throw new Error('API key tidak memiliki model Gemini yang mendukung generateContent. Periksa API key, project, dan Gemini API di Google AI Studio.');
+    }
+
+    let data = null;
+    let lastError = null;
+    for (const model of modelsToTry) {
+      const url = `${GEMINI_API_ROOT}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      console.log('→ mencoba model:', model);
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+        const json = await response.json();
+        console.log('Response status:', response.status, '| model:', model);
+
+        if (response.ok && json?.candidates?.length) {
+          data = json;
+          console.log('✅ model aktif:', model);
+          break;
+        }
+
+        const errMsg = json?.error?.message || `HTTP ${response.status}`;
+        lastError = { message: errMsg, code: json?.error?.code };
+        console.warn('⚠️ gagal:', model, '→', errMsg);
+      } catch (netErr) {
+        lastError = { message: netErr.message, code: 0 };
+        console.warn('⚠️ network error pada model', model, netErr.message);
+      }
+    }
+
+    if (!data) {
+      const msg = lastError ? `${lastError.message} (${lastError.code})` : 'Tidak ada model yang merespons.';
+      console.error('❌ Semua model gagal:', msg);
       throw new Error(msg);
     }
 
-    const data = await response.json();
-
-    // Log raw response untuk debugging
-    console.log('Gemini raw response:', JSON.stringify(data, null, 2));
-
-    // Gemini bisa mengembalikan di candidates[0] atau di berbagai struktur
+    // Extract response
     const candidate = data?.candidates?.[0];
-    const rawText = candidate?.content?.parts?.[0]?.text
-      || candidate?.output
-      || '';
-
-    console.log('Gemini rawText:', rawText);
-
-    if (!rawText) {
-      const finishReason = candidate?.finishReason || 'UNKNOWN';
-      throw new Error(`AI tidak menghasilkan respons (finishReason: ${finishReason}). Coba lagi.`);
+    if (!candidate) {
+      throw new Error('Tidak ada kandidat dalam respons Gemini.');
     }
 
-    // Parse JSON dari respons Gemini
-    const extracted = parseGeminiResponse(rawText);
-    if (!extracted) {
-      // Tampilkan rawText di console untuk investigasi
-      console.warn('Gagal parse JSON, rawText:', rawText);
-      throw new Error('AI tidak dapat mengekstrak data dalam format yang diharapkan. Coba teks atau gambar yang lebih jelas.');
+    const finishReason = candidate?.finishReason;
+    if (finishReason && finishReason !== 'STOP') {
+      console.warn('⚠️ finishReason:', finishReason);
+      if (finishReason === 'SAFETY') {
+        throw new Error('Konten ditolak oleh filter keamanan Gemini. Coba gambar atau teks lain.');
+      }
     }
 
-    aiState.extracted = extracted;
-    renderAiResult(extracted);
-    showAiStep('result');
+    const rawText = candidate?.content?.parts?.[0]?.text || '';
+    
+    if (!rawText || rawText.trim() === '') {
+      throw new Error('AI tidak menghasilkan respons. Coba lagi atau gunakan gambar/teks yang lebih jelas.');
+    }
+
+    console.log('✅ Raw text dari AI:', rawText);
+
+    // Parse semua lowongan, lalu simpan langsung ke Supabase.
+    const extractedJobs = parseGeminiResponse(rawText);
+    if (!extractedJobs.length) {
+      console.warn('⚠️ Tidak ada lowongan valid dari:', rawText);
+      throw new Error('AI tidak menemukan data lowongan valid. Coba input yang lebih jelas.');
+    }
+
+    const savedJobs = [];
+    for (const job of extractedJobs) {
+      const created = await insertJob(job);
+      if (created) savedJobs.push(created);
+    }
+
+    if (!savedJobs.length) {
+      throw new Error('Data terbaca, tetapi gagal disimpan. Periksa koneksi dan izin tabel Supabase.');
+    }
+
+    state.jobs = [...savedJobs, ...state.jobs];
+    refreshUI();
+    closeAiModal();
+    showToast(`${savedJobs.length} lowongan berhasil dibaca dan langsung disimpan.`, 'success');
 
   } catch (e) {
-    console.error('Gemini error:', e);
+    console.error('❌ Error di analyzeWithGemini:', e);
     const msg = e.message || 'Terjadi kesalahan saat menghubungi AI.';
-    if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid') || msg.includes('INVALID_ARGUMENT')) {
-      document.getElementById('err-ai-apikey').textContent = 'API key tidak valid atau belum diaktifkan. Periksa di Google AI Studio.';
-    } else if (msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
-      showToast('Kuota Gemini habis. Coba lagi besok atau gunakan API key berbeda.', 'error');
-    } else if (msg.includes('not found') || msg.includes('404') || msg.includes('MODEL_NOT_FOUND')) {
-      showToast('Model AI tidak tersedia. Mencoba ulang dengan model alternatif…', 'info');
-      // Fallback ke gemini-1.5-flash jika model utama tidak tersedia
-      setTimeout(() => tryGeminiFallback(apiKey, parts, requestBody), 500);
-      return; // jangan jalankan finally dulu
+    
+    // Error handling detail
+    if (msg.includes('API_KEY_INVALID') || msg.includes('INVALID_ARGUMENT')) {
+      document.getElementById('err-ai-apikey').textContent = 'API key tidak valid. Periksa di https://aistudio.google.com/app/apikey';
+      showToast('API key tidak valid.', 'error');
+    } else if (msg.includes('401') || msg.includes('UNAUTHENTICATED')) {
+      document.getElementById('err-ai-apikey').textContent = 'API key tidak dikenali. Buat key baru di Google AI Studio.';
+      showToast('Autentikasi gagal.', 'error');
+    } else if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+      showToast('Tidak ada izin. Periksa API key dan aktivasi Gemini API.', 'error');
+    } else if (msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')) {
+      showToast('Kuota Gemini habis. Tunggu beberapa jam atau upgrade account.', 'error');
+    } else if (msg.includes('SAFETY')) {
+      showToast('Konten ditolak filter keamanan. Coba gambar/teks lain.', 'error');
+    } else if (msg.includes('MODEL_NOT_FOUND') || msg.includes('404')) {
+      showToast('Model Gemini tidak ditemukan. Coba refresh halaman.', 'error');
+    } else if (msg.includes('network') || msg.includes('fetch')) {
+      showToast('Gagal terhubung ke AI. Periksa koneksi internet.', 'error');
     } else {
-      showToast(msg, 'error');
+      showToast(`Error: ${msg}`, 'error');
     }
-  } finally {
-    setAiAnalyzeLoading(false);
-  }
-}
-
-/**
- * Fallback ke gemini-1.5-flash jika model utama gagal.
- * Dipanggil hanya ketika model-not-found error terjadi.
- */
-async function tryGeminiFallback(apiKey, parts, requestBody) {
-  const fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
-  try {
-    const response = await fetch(`${fallbackUrl}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    const candidate = data?.candidates?.[0];
-    const rawText = candidate?.content?.parts?.[0]?.text || '';
-    if (!rawText) throw new Error('Tidak ada respons dari model fallback.');
-    const extracted = parseGeminiResponse(rawText);
-    if (!extracted) throw new Error('Gagal mengekstrak data dari model fallback.');
-    aiState.extracted = extracted;
-    renderAiResult(extracted);
-    showAiStep('result');
-    showToast('Berhasil menggunakan model AI alternatif.', 'success');
-  } catch (err) {
-    showToast('Gagal menghubungi AI. Periksa API key dan koneksi internet.', 'error');
   } finally {
     setAiAnalyzeLoading(false);
   }
@@ -1485,7 +1590,9 @@ async function tryGeminiFallback(apiKey, parts, requestBody) {
 
 /** Parsing respons teks Gemini menjadi objek JavaScript */
 function parseGeminiResponse(rawText) {
-  if (!rawText) return null;
+  if (!rawText || rawText.trim() === '') return [];
+
+  console.log('📝 Parsing rawText:', rawText.substring(0, 200) + '...');
 
   // Strategi 1: bersihkan markdown code block, coba parse langsung
   try {
@@ -1494,62 +1601,196 @@ function parseGeminiResponse(rawText) {
       .replace(/```\s*/gi, '')
       .trim();
     const parsed = JSON.parse(cleaned);
-    if (parsed && typeof parsed === 'object') return sanitizeParsedJob(parsed);
-  } catch { /* lanjut ke strategi berikutnya */ }
-
-  // Strategi 2: cari blok JSON pertama dengan regex greedy
-  const match = rawText.match(/\{[\s\S]*\}/);
-  if (match) {
-    try {
-      const parsed = JSON.parse(match[0]);
-      if (parsed && typeof parsed === 'object') return sanitizeParsedJob(parsed);
-    } catch { /* lanjut */ }
+    const jobs = Array.isArray(parsed) ? parsed : [parsed];
+    const validJobs = jobs.map(sanitizeParsedJob).filter(Boolean);
+    if (validJobs.length) {
+      console.log(`✅ Parsing berhasil: ${validJobs.length} lowongan`);
+      return validJobs;
+    }
+  } catch (e) {
+    console.log('⚠️ Strategi 1 gagal:', e.message);
   }
 
-  // Strategi 3: coba ekstrak baris per baris dari format non-JSON
-  // (Gemini kadang mengembalikan key: value tanpa kurung kurawal)
-  const lines = rawText.split('\n');
-  const extracted = {};
-  const fieldMap = {
-    'company': 'company', 'perusahaan': 'company',
-    'position': 'position', 'posisi': 'position', 'jabatan': 'position',
-    'location': 'location', 'lokasi': 'location',
-    'type': 'type', 'jenis': 'type',
-    'status': 'status',
-    'apply_date': 'applyDate', 'applydate': 'applyDate', 'tanggal': 'applyDate',
-    'deadline': 'deadline', 'tenggat': 'deadline',
-    'salary': 'salary', 'gaji': 'salary',
-    'source': 'source', 'url': 'source', 'sumber': 'source',
-    'notes': 'notes', 'catatan': 'notes',
-    'confidence': 'confidence',
-  };
-  lines.forEach(line => {
-    const sep = line.indexOf(':');
-    if (sep === -1) return;
-    const key = line.slice(0, sep).trim().toLowerCase().replace(/[^a-z_]/g, '');
-    const val = line.slice(sep + 1).trim().replace(/^["']|["']$/g, '');
-    const mapped = fieldMap[key];
-    if (mapped && val && val !== '""' && val !== "''") extracted[mapped] = val;
-  });
-  if (extracted.company || extracted.position) return sanitizeParsedJob(extracted);
+  // Strategi 2: cari array JSON atau parse setiap blok object {...} secara terpisah
+  try {
+    const arrayMatch = rawText.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      try {
+        const parsed = JSON.parse(arrayMatch[0]);
+        const jobs = Array.isArray(parsed) ? parsed : [parsed];
+        const validJobs = jobs.map(sanitizeParsedJob).filter(Boolean);
+        if (validJobs.length) {
+          console.log(`✅ Parsing berhasil (strategi 2: array regex): ${validJobs.length} lowongan`);
+          return validJobs;
+        }
+      } catch { /* jika array terpotong, lanjut ke ekstraksi objek individual */ }
+    }
 
-  return null;
+    // Ekstrak semua objek {...} yang ada di dalam teks
+    const objectRegex = /\{[^{}]*"company"[^{}]*\}/g;
+    const objectMatches = rawText.match(objectRegex);
+    if (objectMatches && objectMatches.length) {
+      const extractedList = [];
+      for (const str of objectMatches) {
+        try {
+          const parsedObj = JSON.parse(str);
+          const clean = sanitizeParsedJob(parsedObj);
+          if (clean) extractedList.push(clean);
+        } catch { /* skip object cacat */ }
+      }
+      if (extractedList.length) {
+        console.log(`✅ Parsing berhasil (strategi 2b: objek individual): ${extractedList.length} lowongan`);
+        return extractedList;
+      }
+    }
+  } catch (e) {
+    console.log('⚠️ Strategi 2 gagal:', e.message);
+  }
+
+  // Strategi 3: Parse langsung dari format daftar/checklist baris per baris
+  // Contoh: "- [ ] **Posisi - PT Perusahaan**" atau "1. Posisi - PT Perusahaan"
+  try {
+    const lines = rawText.split('\n');
+    const checklistJobs = [];
+    const today = new Date().toISOString().split('T')[0];
+
+    for (const line of lines) {
+      const cleanLine = line.trim()
+        .replace(/^[-*•\d.]+\s*/, '')          // hapus bullet / numbering
+        .replace(/\[\s*[xX ]?\s*\]\s*/, '')     // hapus [ ] atau [x]
+        .replace(/\*\*/g, '')                  // hapus bold markdown
+        .trim();
+
+      if (!cleanLine || cleanLine.length < 5) continue;
+
+      // Cari pemisah umum antara Posisi dan Perusahaan: " - ", " di ", " @ ", " | "
+      let pos = '';
+      let comp = '';
+      if (cleanLine.includes(' - ')) {
+        const parts = cleanLine.split(' - ');
+        pos = parts[0].trim();
+        comp = parts.slice(1).join(' - ').trim();
+      } else if (cleanLine.includes(' — ')) {
+        const parts = cleanLine.split(' — ');
+        pos = parts[0].trim();
+        comp = parts.slice(1).join(' — ').trim();
+      } else if (cleanLine.toLowerCase().includes(' di ')) {
+        const parts = cleanLine.split(/\s+di\s+/i);
+        pos = parts[0].trim();
+        comp = parts.slice(1).join(' di ').trim();
+      } else if (cleanLine.includes(' | ')) {
+        const parts = cleanLine.split(' | ');
+        pos = parts[0].trim();
+        comp = parts.slice(1).join(' | ').trim();
+      }
+
+      // Jika terbalik (misal: "PT ABC - Frontend Developer"), tukar pos & comp
+      if (pos && comp) {
+        if (/^(pt|cv|pt\.|cv\.|ud\.|yayasan|kantor)/i.test(pos) && !/^(pt|cv|pt\.|cv\.|ud\.)/i.test(comp)) {
+          const temp = pos;
+          pos = comp;
+          comp = temp;
+        }
+
+        const candidateJob = sanitizeParsedJob({
+          company: comp,
+          position: pos,
+          status: 'Applied',
+          applyDate: today,
+        });
+
+        if (candidateJob) {
+          checklistJobs.push(candidateJob);
+        }
+      }
+    }
+
+    if (checklistJobs.length) {
+      console.log(`✅ Parsing berhasil (strategi 3: checklist/list lines): ${checklistJobs.length} lowongan`);
+      return checklistJobs;
+    }
+  } catch (e) {
+    console.log('⚠️ Strategi 3 gagal:', e.message);
+  }
+
+  // Strategi 4: format key-value tunggal (fallback)
+  try {
+    const lines = rawText.split('\n');
+    const extracted = {};
+    const fieldMap = {
+      'company': 'company', 'perusahaan': 'company', 'nama perusahaan': 'company',
+      'position': 'position', 'posisi': 'position', 'jabatan': 'position', 'job title': 'position',
+      'location': 'location', 'lokasi': 'location', 'kota': 'location',
+      'type': 'type', 'jenis': 'type', 'tipe pekerjaan': 'type', 'job type': 'type',
+      'status': 'status', 'status lamaran': 'status',
+      'apply_date': 'applyDate', 'applydate': 'applyDate', 'tanggal': 'applyDate', 'tanggal apply': 'applyDate',
+      'deadline': 'deadline', 'tenggat': 'deadline', 'tenggat waktu': 'deadline',
+      'salary': 'salary', 'gaji': 'salary', 'upah': 'salary', 'kisaran gaji': 'salary',
+      'source': 'source', 'url': 'source', 'sumber': 'source', 'job url': 'source',
+      'notes': 'notes', 'catatan': 'notes', 'keterangan': 'notes',
+      'confidence': 'confidence',
+    };
+
+    lines.forEach(line => {
+      const sep = line.indexOf(':');
+      if (sep === -1) return;
+      
+      const key = line.slice(0, sep).trim().toLowerCase().replace(/[^a-z_\s]/g, '').trim();
+      const val = line.slice(sep + 1).trim().replace(/^["']|["']$/g, '').trim();
+      
+      const mapped = fieldMap[key];
+      if (mapped && val && val !== '""' && val !== "''" && val.toLowerCase() !== 'null') {
+        extracted[mapped] = val;
+      }
+    });
+
+    if (Object.keys(extracted).length > 0 && (extracted.company || extracted.position)) {
+      console.log('✅ Parsing berhasil (strategi 4: key-value lines)');
+      return [sanitizeParsedJob(extracted)];
+    }
+  } catch (e) {
+    console.log('⚠️ Strategi 4 gagal:', e.message);
+  }
+
+  console.error('❌ Semua strategi parsing gagal');
+  return [];
 }
 
 /**
- * Normalisasi objek yang di-parse dari Gemini:
- * - Pastikan field company / position ada (minimal kosong)
- * - Hapus nilai yang bermakna "kosong"
+ * Normalisasi objek yang di-parse dari Gemini
  */
 function sanitizeParsedJob(obj) {
-  const empty = ['', '""', "''", 'null', 'undefined', '-', '—', 'n/a', 'tidak ada'];
+  const empty = ['', '""', "''", 'null', 'undefined', '-', '—', 'n/a', 'tidak ada', 'none', 'kosong'];
   const clean = {};
+  
   Object.entries(obj).forEach(([k, v]) => {
+    if (!k || !v) return;
     const str = String(v ?? '').trim();
-    clean[k] = empty.includes(str.toLowerCase()) ? '' : str;
+    if (!empty.includes(str.toLowerCase())) {
+      clean[k] = str;
+    }
   });
+
   // Validasi minimal
-  if (!clean.company && !clean.position) return null;
+  if (!clean.company && !clean.position) {
+    console.warn('❌ Minimal validation failed: company dan position kosong');
+    return null;
+  }
+
+  // Set default jika ada data
+  if (!clean.status) clean.status = 'Applied';
+  
+  // Validasi & set default applyDate
+  if (!clean.applyDate || !/^\d{4}-\d{2}-\d{2}$/.test(clean.applyDate)) {
+    clean.applyDate = new Date().toISOString().split('T')[0];
+  }
+
+  // Validasi format deadline (jika ada)
+  if (clean.deadline && !/^\d{4}-\d{2}-\d{2}$/.test(clean.deadline)) {
+    console.warn(`⚠️ deadline format invalid: "${clean.deadline}", dihapus`);
+    delete clean.deadline;
+  }
+
   return clean;
 }
 
