@@ -1210,7 +1210,16 @@ function registerEventListeners() {
 async function init() {
   showLoadingScreen();
 
-  // Cek apakah Supabase sudah dikonfigurasi
+  // Pastikan Supabase SDK sudah termuat dari CDN
+  if (typeof supabase === 'undefined') {
+    console.error('Supabase SDK belum termuat. Periksa koneksi internet.');
+    showAuthPage();
+    registerEventListeners();
+    injectResultsCount();
+    return;
+  }
+
+  // Cek apakah kredensial sudah dikonfigurasi
   const configured = initSupabase();
   if (!configured) {
     document.getElementById('supabase-warning').classList.remove('hidden');
@@ -1230,7 +1239,6 @@ async function init() {
       state.currentUser = session.user;
       renderUserInfo(session.user);
       showLoadingScreen();
-      // Muat data dari Supabase
       state.jobs = await fetchJobs();
       showAppPage();
       renderDashboard();
@@ -1240,14 +1248,19 @@ async function init() {
   });
 
   // Cek sesi yang sudah ada (user refresh halaman)
-  const { data: { session } } = await db.auth.getSession();
-  if (session?.user) {
-    state.currentUser = session.user;
-    renderUserInfo(session.user);
-    state.jobs = await fetchJobs();
-    showAppPage();
-    renderDashboard();
-  } else {
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (session?.user) {
+      state.currentUser = session.user;
+      renderUserInfo(session.user);
+      state.jobs = await fetchJobs();
+      showAppPage();
+      renderDashboard();
+    } else {
+      showAuthPage();
+    }
+  } catch (e) {
+    console.error('Gagal menghubungi Supabase:', e);
     showAuthPage();
   }
 }
