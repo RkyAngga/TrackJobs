@@ -825,6 +825,14 @@ body {
   margin: 0 auto 18px;
 }
 
+.empty-state-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
 /* ─── Modals ─────────────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
@@ -925,6 +933,24 @@ body {
 }
 
 .required-star { color: var(--color-error); }
+
+/* Label row dengan character count */
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.char-count {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  transition: color 0.18s ease;
+}
+
+.char-count.char-count-warn  { color: var(--color-warning); }
+.char-count.char-count-limit { color: var(--color-error);   font-weight: 700; }
 
 .form-input {
   padding: 9px 12px;

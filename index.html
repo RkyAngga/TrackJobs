@@ -192,7 +192,7 @@
 
       <!-- Sidebar footer -->
       <div class="sidebar-footer">
-        <p class="text-xs text-center opacity-60">v2.0 · IBM Bob Challenge</p>
+        <p class="text-xs text-center opacity-60">v2.1 · IBM Bob Challenge</p>
       </div>
     </aside>
 
@@ -427,7 +427,10 @@
             <span class="form-error" id="err-source" role="alert"></span>
           </div>
           <div class="form-group form-group-full">
-            <label for="form-notes" class="form-label">Catatan</label>
+            <div class="form-label-row">
+              <label for="form-notes" class="form-label">Catatan</label>
+              <span class="char-count" id="notes-count" aria-live="polite">0 / 500</span>
+            </div>
             <textarea id="form-notes" class="form-input form-textarea" placeholder="Informasi tambahan, kontak rekruter, tahap selanjutnya…" maxlength="500" rows="3"></textarea>
           </div>
         </div>

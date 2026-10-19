@@ -27,6 +27,70 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const RECENT_LIMIT = 5;
 
+/** Data contoh untuk onboarding — bisa dihapus oleh user */
+const SAMPLE_JOBS = [
+  {
+    company: 'Tokopedia',
+    position: 'Frontend Developer',
+    location: 'Jakarta Selatan',
+    type: 'Full-time',
+    status: 'Interview',
+    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-10); return d.toISOString().split('T')[0]; })(),
+    deadline: (() => { const d = new Date(); d.setDate(d.getDate()+7); return d.toISOString().split('T')[0]; })(),
+    salary: 'Rp 12 – 18 juta / bulan',
+    source: 'https://www.linkedin.com',
+    notes: 'Sudah lolos screening awal. Jadwal interview teknikal minggu depan.',
+  },
+  {
+    company: 'Gojek',
+    position: 'Product Manager Intern',
+    location: 'Jakarta Pusat',
+    type: 'Internship',
+    status: 'Applied',
+    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-5); return d.toISOString().split('T')[0]; })(),
+    deadline: (() => { const d = new Date(); d.setDate(d.getDate()+14); return d.toISOString().split('T')[0]; })(),
+    salary: 'Rp 3 – 5 juta / bulan',
+    source: 'https://careers.gojek.com',
+    notes: 'Magang 6 bulan, full remote. Apply via portal karir.',
+  },
+  {
+    company: 'Traveloka',
+    position: 'UI/UX Designer',
+    location: 'Remote',
+    type: 'Remote',
+    status: 'Assessment',
+    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-15); return d.toISOString().split('T')[0]; })(),
+    deadline: (() => { const d = new Date(); d.setDate(d.getDate()+3); return d.toISOString().split('T')[0]; })(),
+    salary: 'Rp 10 – 15 juta / bulan',
+    source: 'https://www.traveloka.com/career',
+    notes: 'Tugas portfolio design: buat ulang halaman checkout dalam 3 hari.',
+  },
+  {
+    company: 'Shopee Indonesia',
+    position: 'Data Analyst',
+    location: 'Jakarta Utara',
+    type: 'Full-time',
+    status: 'Offered',
+    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-25); return d.toISOString().split('T')[0]; })(),
+    deadline: '',
+    salary: 'Rp 14 – 20 juta / bulan',
+    source: 'https://careers.shopee.co.id',
+    notes: 'Tawaran diterima! Perlu keputusan sebelum akhir bulan ini.',
+  },
+  {
+    company: 'Bukalapak',
+    position: 'Backend Engineer',
+    location: 'Bandung',
+    type: 'Full-time',
+    status: 'Rejected',
+    applyDate: (() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().split('T')[0]; })(),
+    deadline: '',
+    salary: 'Rp 10 – 14 juta / bulan',
+    source: 'https://careers.bukalapak.com',
+    notes: 'Ditolak setelah wawancara teknis tahap 2. Follow up untuk feedback.',
+  },
+];
+
 /** Status label dan kelas badge */
 const STATUS_CONFIG = {
   Saved:     { label: 'Disimpan',        badge: 'badge-saved' },
@@ -638,13 +702,44 @@ function buildEmptyState(message) {
     <p>${message ? 'Coba ubah kata kunci atau filter Anda.' : 'Mulai tambahkan lamaran kerja pertama Anda!'}</p>
   `;
   if (!message) {
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'empty-state-actions';
+
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
     btn.textContent = '+ Tambah Pekerjaan';
     btn.addEventListener('click', openAddModal);
-    div.appendChild(btn);
+
+    const sampleBtn = document.createElement('button');
+    sampleBtn.className = 'btn-secondary';
+    sampleBtn.textContent = 'Muat Contoh Data';
+    sampleBtn.addEventListener('click', loadSampleData);
+
+    btnWrap.append(btn, sampleBtn);
+    div.appendChild(btnWrap);
   }
   return div;
+}
+
+/** Masukkan data contoh ke Supabase untuk onboarding */
+async function loadSampleData() {
+  if (!state.currentUser) return;
+
+  showToast('Memuat contoh data…', 'info');
+
+  let added = 0;
+  for (const job of SAMPLE_JOBS) {
+    const created = await insertJob(job);
+    if (created) {
+      state.jobs.unshift(created);
+      added++;
+    }
+  }
+
+  if (added > 0) {
+    refreshUI();
+    showToast(`${added} data contoh berhasil dimuat! Anda bisa menghapusnya kapan saja.`, 'success');
+  }
 }
 
 /* =========================================================================
@@ -676,6 +771,18 @@ function renderRecentList() {
       <h3>Belum ada lamaran</h3>
       <p>Tambahkan lamaran pertama Anda untuk mulai melacak progres.</p>
     `;
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'empty-state-actions';
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary';
+    btn.textContent = '+ Tambah Pekerjaan';
+    btn.addEventListener('click', openAddModal);
+    const sampleBtn = document.createElement('button');
+    sampleBtn.className = 'btn-secondary';
+    sampleBtn.textContent = 'Muat Contoh Data';
+    sampleBtn.addEventListener('click', loadSampleData);
+    btnWrap.append(btn, sampleBtn);
+    empty.appendChild(btnWrap);
     container.appendChild(empty);
     return;
   }
@@ -833,6 +940,7 @@ function openEditModal(jobId) {
   document.getElementById('form-salary').value     = sanitize(job.salary);
   document.getElementById('form-source').value     = sanitize(job.source);
   document.getElementById('form-notes').value      = sanitize(job.notes);
+  updateNotesCount();
   openModal();
 }
 
@@ -852,6 +960,7 @@ function resetForm() {
   document.getElementById('job-form').reset();
   document.getElementById('form-id').value = '';
   clearFormErrors();
+  updateNotesCount();
 }
 
 function clearFormErrors() {
@@ -1105,7 +1214,7 @@ function refreshUI() {
    ========================================================================= */
 
 const GEMINI_STORAGE_KEY = 'trackjobs_gemini_key';
-const GEMINI_API_URL     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
+const GEMINI_API_URL     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 /** State lokal AI modal */
 const aiState = {
@@ -1295,12 +1404,29 @@ async function analyzeWithGemini() {
     }
 
     const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Log raw response untuk debugging
+    console.log('Gemini raw response:', JSON.stringify(data, null, 2));
+
+    // Gemini bisa mengembalikan di candidates[0] atau di berbagai struktur
+    const candidate = data?.candidates?.[0];
+    const rawText = candidate?.content?.parts?.[0]?.text
+      || candidate?.output
+      || '';
+
+    console.log('Gemini rawText:', rawText);
+
+    if (!rawText) {
+      const finishReason = candidate?.finishReason || 'UNKNOWN';
+      throw new Error(`AI tidak menghasilkan respons (finishReason: ${finishReason}). Coba lagi.`);
+    }
 
     // Parse JSON dari respons Gemini
     const extracted = parseGeminiResponse(rawText);
     if (!extracted) {
-      throw new Error('AI tidak dapat mengekstrak data. Coba gambar atau teks yang lebih jelas.');
+      // Tampilkan rawText di console untuk investigasi
+      console.warn('Gagal parse JSON, rawText:', rawText);
+      throw new Error('AI tidak dapat mengekstrak data dalam format yang diharapkan. Coba teks atau gambar yang lebih jelas.');
     }
 
     aiState.extracted = extracted;
@@ -1310,10 +1436,15 @@ async function analyzeWithGemini() {
   } catch (e) {
     console.error('Gemini error:', e);
     const msg = e.message || 'Terjadi kesalahan saat menghubungi AI.';
-    if (msg.includes('API_KEY_INVALID') || msg.includes('API key')) {
-      document.getElementById('err-ai-apikey').textContent = 'API key tidak valid. Periksa kembali.';
+    if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid') || msg.includes('INVALID_ARGUMENT')) {
+      document.getElementById('err-ai-apikey').textContent = 'API key tidak valid atau belum diaktifkan. Periksa di Google AI Studio.';
     } else if (msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
       showToast('Kuota Gemini habis. Coba lagi besok atau gunakan API key berbeda.', 'error');
+    } else if (msg.includes('not found') || msg.includes('404') || msg.includes('MODEL_NOT_FOUND')) {
+      showToast('Model AI tidak tersedia. Mencoba ulang dengan model alternatif…', 'info');
+      // Fallback ke gemini-1.5-flash jika model utama tidak tersedia
+      setTimeout(() => tryGeminiFallback(apiKey, parts, requestBody), 500);
+      return; // jangan jalankan finally dulu
     } else {
       showToast(msg, 'error');
     }
@@ -1322,31 +1453,104 @@ async function analyzeWithGemini() {
   }
 }
 
+/**
+ * Fallback ke gemini-1.5-flash jika model utama gagal.
+ * Dipanggil hanya ketika model-not-found error terjadi.
+ */
+async function tryGeminiFallback(apiKey, parts, requestBody) {
+  const fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  try {
+    const response = await fetch(`${fallbackUrl}?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const candidate = data?.candidates?.[0];
+    const rawText = candidate?.content?.parts?.[0]?.text || '';
+    if (!rawText) throw new Error('Tidak ada respons dari model fallback.');
+    const extracted = parseGeminiResponse(rawText);
+    if (!extracted) throw new Error('Gagal mengekstrak data dari model fallback.');
+    aiState.extracted = extracted;
+    renderAiResult(extracted);
+    showAiStep('result');
+    showToast('Berhasil menggunakan model AI alternatif.', 'success');
+  } catch (err) {
+    showToast('Gagal menghubungi AI. Periksa API key dan koneksi internet.', 'error');
+  } finally {
+    setAiAnalyzeLoading(false);
+  }
+}
+
 /** Parsing respons teks Gemini menjadi objek JavaScript */
 function parseGeminiResponse(rawText) {
   if (!rawText) return null;
+
+  // Strategi 1: bersihkan markdown code block, coba parse langsung
   try {
-    // Hilangkan markdown code block jika ada
     const cleaned = rawText
       .replace(/```json\s*/gi, '')
-      .replace(/```\s*/g, '')
+      .replace(/```\s*/gi, '')
       .trim();
     const parsed = JSON.parse(cleaned);
-    // Validasi minimal: harus ada company atau position
-    if (!parsed.company && !parsed.position) return null;
-    return parsed;
-  } catch {
-    // Coba ekstrak JSON dari dalam teks
-    const match = rawText.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    if (parsed && typeof parsed === 'object') return sanitizeParsedJob(parsed);
+  } catch { /* lanjut ke strategi berikutnya */ }
+
+  // Strategi 2: cari blok JSON pertama dengan regex greedy
+  const match = rawText.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]);
+      if (parsed && typeof parsed === 'object') return sanitizeParsedJob(parsed);
+    } catch { /* lanjut */ }
   }
+
+  // Strategi 3: coba ekstrak baris per baris dari format non-JSON
+  // (Gemini kadang mengembalikan key: value tanpa kurung kurawal)
+  const lines = rawText.split('\n');
+  const extracted = {};
+  const fieldMap = {
+    'company': 'company', 'perusahaan': 'company',
+    'position': 'position', 'posisi': 'position', 'jabatan': 'position',
+    'location': 'location', 'lokasi': 'location',
+    'type': 'type', 'jenis': 'type',
+    'status': 'status',
+    'apply_date': 'applyDate', 'applydate': 'applyDate', 'tanggal': 'applyDate',
+    'deadline': 'deadline', 'tenggat': 'deadline',
+    'salary': 'salary', 'gaji': 'salary',
+    'source': 'source', 'url': 'source', 'sumber': 'source',
+    'notes': 'notes', 'catatan': 'notes',
+    'confidence': 'confidence',
+  };
+  lines.forEach(line => {
+    const sep = line.indexOf(':');
+    if (sep === -1) return;
+    const key = line.slice(0, sep).trim().toLowerCase().replace(/[^a-z_]/g, '');
+    const val = line.slice(sep + 1).trim().replace(/^["']|["']$/g, '');
+    const mapped = fieldMap[key];
+    if (mapped && val && val !== '""' && val !== "''") extracted[mapped] = val;
+  });
+  if (extracted.company || extracted.position) return sanitizeParsedJob(extracted);
+
+  return null;
+}
+
+/**
+ * Normalisasi objek yang di-parse dari Gemini:
+ * - Pastikan field company / position ada (minimal kosong)
+ * - Hapus nilai yang bermakna "kosong"
+ */
+function sanitizeParsedJob(obj) {
+  const empty = ['', '""', "''", 'null', 'undefined', '-', '—', 'n/a', 'tidak ada'];
+  const clean = {};
+  Object.entries(obj).forEach(([k, v]) => {
+    const str = String(v ?? '').trim();
+    clean[k] = empty.includes(str.toLowerCase()) ? '' : str;
+  });
+  // Validasi minimal
+  if (!clean.company && !clean.position) return null;
+  return clean;
 }
 
 /* ─── Render hasil ekstraksi ─────────────────────────────────────────────── */
@@ -1444,6 +1648,7 @@ function applyAiResultToForm() {
     const mappedType = typeMap[typeNorm] || result.type || '';
     if (mappedType) document.getElementById('form-type').value = mappedType;
 
+    updateNotesCount();
     showToast('✨ Formulir berhasil diisi oleh AI!', 'success');
   }, 80);
 }
@@ -1644,6 +1849,20 @@ function registerEventListeners() {
     state.filters.sort = e.target.value;
     renderApplications();
   });
+
+  // ── Notes character counter ──────────────────────────────────────────────
+  document.getElementById('form-notes').addEventListener('input', updateNotesCount);
+}
+
+/** Perbarui hitungan karakter textarea catatan */
+function updateNotesCount() {
+  const ta    = document.getElementById('form-notes');
+  const count = document.getElementById('notes-count');
+  if (!ta || !count) return;
+  const len = ta.value.length;
+  count.textContent = `${len} / 500`;
+  count.classList.toggle('char-count-warn', len >= 400);
+  count.classList.toggle('char-count-limit', len >= 490);
 }
 
 /* =========================================================================
