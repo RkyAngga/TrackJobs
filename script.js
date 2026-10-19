@@ -1235,8 +1235,8 @@ async function analyzeWithGemini() {
   document.getElementById('err-ai-apikey').textContent = '';
 
   // Validasi API key
-  if (!apiKey || !apiKey.startsWith('AIza') || apiKey.length < 20) {
-    document.getElementById('err-ai-apikey').textContent = 'Masukkan API key Gemini yang valid (dimulai dengan AIza…).';
+  if (!apiKey || apiKey.length < 20) {
+    document.getElementById('err-ai-apikey').textContent = 'API key tidak boleh kosong (minimal 20 karakter).';
     document.getElementById('ai-apikey').focus();
     return;
   }
