@@ -77,7 +77,16 @@ function initSupabase() {
 
   try {
     const { createClient } = supabase;
-    db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        // Gunakan key standar Supabase agar sesi lama dan sesi baru terbaca sama.
+        storageKey: 'sb-czqrfziapwiitoxfvobs-auth-token',
+        storage: window.localStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
     return true;
   } catch (e) {
     console.error('Gagal inisialisasi Supabase:', e);
@@ -710,6 +719,7 @@ function renderRecentList() {
       <h3>Belum ada lamaran</h3>
       <p>Tambahkan lamaran pertama Anda untuk mulai melacak progres.</p>
     `;
+    const btnWrap = document.createElement('div');
     btnWrap.className = 'empty-state-actions';
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
@@ -2034,12 +2044,22 @@ async function init() {
     return;
   }
 
+  let authSessionResolved = false;
+
   // Pantau perubahan sesi autentikasi
   db.auth.onAuthStateChange(async (event, session) => {
+    authSessionResolved = true;
+
     if (event === 'SIGNED_IN' && session?.user) {
       state.currentUser = session.user;
       renderUserInfo(session.user);
       showLoadingScreen();
+      state.jobs = await fetchJobs();
+      showAppPage();
+      renderDashboard();
+    } else if (event === 'INITIAL_SESSION' && session?.user) {
+      state.currentUser = session.user;
+      renderUserInfo(session.user);
       state.jobs = await fetchJobs();
       showAppPage();
       renderDashboard();
@@ -2058,12 +2078,27 @@ async function init() {
       showAppPage();
       renderDashboard();
     } else {
-      showAuthPage();
+      // Biarkan INITIAL_SESSION dari onAuthStateChange menentukan halaman.
+      // getSession() bisa selesai sebelum SDK selesai memulihkan sesi tersimpan.
+      console.info('Belum ada sesi aktif; menunggu pemulihan sesi Supabase.');
     }
   } catch (e) {
-    console.error('Gagal menghubungi Supabase:', e);
+    console.error('Gagal memulihkan sesi Supabase:', e);
     showAuthPage();
   }
+
+  // Jaring pengaman: jika onAuthStateChange belum memberi jawaban apa pun
+  // (misalnya karena SDK CDN gagal memuat callback), tetapkan halaman ourselves.
+  setTimeout(() => {
+    if (!authSessionResolved) {
+      if (state.currentUser) {
+        showAppPage();
+        renderDashboard();
+      } else {
+        showAuthPage();
+      }
+    }
+  }, 1200);
 }
 
 // Jalankan saat DOM siap
