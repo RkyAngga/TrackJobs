@@ -45,6 +45,7 @@ body {
   color: var(--color-text);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 /* Accessibility: visible focus ring */
@@ -197,6 +198,8 @@ body {
 .main-content {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -208,12 +211,20 @@ body {
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  gap: 14px;
+  padding: 0 12px;
+  gap: 10px;
   position: sticky;
   top: 0;
   z-index: 100;
   box-shadow: 0 1px 4px rgba(51,104,160,0.07);
+}
+
+@media (min-width: 480px) {
+  .topbar { padding: 0 16px; gap: 12px; }
+}
+
+@media (min-width: 768px) {
+  .topbar { padding: 0 20px; gap: 14px; }
 }
 
 .menu-toggle {
@@ -325,9 +336,17 @@ body {
 
 /* ─── View Content ───────────────────────────────────────────────────────── */
 .view-content {
-  padding: 24px 20px;
+  padding: 16px 12px;
   max-width: 1200px;
   width: 100%;
+}
+
+@media (min-width: 480px) {
+  .view-content { padding: 20px 16px; }
+}
+
+@media (min-width: 768px) {
+  .view-content { padding: 24px 20px; }
 }
 
 .hidden { display: none !important; }
@@ -475,15 +494,26 @@ body {
 .job-card {
   background: var(--color-white);
   border-radius: var(--radius);
-  padding: 18px;
+  padding: 14px;
   box-shadow: var(--shadow);
   border: 1px solid var(--color-border);
   transition: transform var(--transition), box-shadow var(--transition);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   position: relative;
+  /* Cegah kartu meluber keluar container */
+  min-width: 0;
+  overflow: hidden;
+}
+
+@media (min-width: 480px) {
+  .job-card { padding: 16px; gap: 10px; }
+}
+
+@media (min-width: 768px) {
+  .job-card { padding: 18px; }
 }
 .job-card:hover {
   transform: translateY(-2px);
@@ -676,13 +706,21 @@ body {
 .toolbar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 16px;
   background: var(--color-white);
-  padding: 16px;
+  padding: 12px;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   border: 1px solid var(--color-border);
+}
+
+@media (min-width: 480px) {
+  .toolbar { padding: 14px; gap: 10px; }
+}
+
+@media (min-width: 768px) {
+  .toolbar { padding: 16px; margin-bottom: 20px; }
 }
 
 .search-wrap {
@@ -716,23 +754,46 @@ body {
 }
 
 .filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* Di mobile: status & jenis berdampingan, sort penuh */
+.filter-row .select-filter:last-child {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 480px) {
+  .filter-row {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .filter-row .select-filter:last-child {
+    grid-column: auto;
+  }
 }
 
 .select-filter {
-  flex: 1;
-  min-width: 130px;
-  padding: 8px 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-sm);
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   color: var(--color-text);
   background: var(--color-ivory);
   cursor: pointer;
   transition: border-color var(--transition);
+  /* Cegah overflow teks pada option panjang */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+@media (min-width: 480px) {
+  .select-filter { font-size: 0.84rem; padding: 8px 12px; }
+}
+
 .select-filter:focus {
   outline: none;
   border-color: var(--color-primary);
@@ -1050,6 +1111,50 @@ body {
 .results-count {
   font-size: 0.82rem;
   color: var(--color-text-muted);
-  padding: 0 2px 10px;
+  padding: 0 2px 8px;
+}
+
+/* ─── Mobile overflow guard ──────────────────────────────────────────────── */
+/* Pastikan semua elemen tidak melampaui lebar layar di mobile */
+@media (max-width: 479px) {
+  .job-card-header {
+    gap: 8px;
+  }
+
+  .job-company-logo {
+    width: 36px;
+    height: 36px;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+
+  .job-position {
+    font-size: 0.88rem;
+  }
+
+  .job-card-meta {
+    font-size: 0.74rem;
+    gap: 4px;
+  }
+
+  .badge {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+  }
+
+  .btn-icon {
+    padding: 5px;
+  }
+
+  /* Toast lebih sempit di mobile */
+  .toast-container {
+    right: 12px;
+    left: 12px;
+    bottom: 16px;
+  }
+
+  .toast {
+    max-width: 100%;
+  }
 }
 
