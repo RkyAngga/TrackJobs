@@ -1822,3 +1822,357 @@ body {
 .sidebar-overlay.active {
   animation: fadeIn 0.2s ease both;
 }
+
+/* =========================================================================
+   AI AGENT STYLES
+   ========================================================================= */
+
+/* ─── Tombol AI di topbar ────────────────────────────────────────────────── */
+.btn-ai-topbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 13px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: var(--color-white);
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+  box-shadow: 0 2px 8px rgba(79,70,229,0.3);
+}
+.btn-ai-topbar:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(79,70,229,0.4);
+}
+.btn-ai-topbar:active { transform: scale(0.97); }
+
+/* ─── Modal AI size ──────────────────────────────────────────────────────── */
+.modal-box-ai {
+  max-width: 560px;
+}
+
+/* ─── Modal header AI ────────────────────────────────────────────────────── */
+.ai-modal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-badge-icon {
+  width: 30px;
+  height: 30px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: white;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ─── Steps ──────────────────────────────────────────────────────────────── */
+.ai-step {
+  padding: 18px 22px;
+}
+
+.ai-desc {
+  font-size: 0.845rem;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+/* ─── Input tabs (Gambar / Teks) ─────────────────────────────────────────── */
+.ai-input-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.ai-input-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-ivory);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.ai-input-tab:hover {
+  border-color: #7c3aed;
+  color: #4f46e5;
+  background: #f5f3ff;
+}
+.ai-input-tab.active {
+  background: #f5f3ff;
+  border-color: #7c3aed;
+  color: #4f46e5;
+}
+
+/* ─── Panel ──────────────────────────────────────────────────────────────── */
+.ai-panel {
+  margin-bottom: 14px;
+}
+
+/* ─── Dropzone ───────────────────────────────────────────────────────────── */
+.ai-dropzone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-ivory);
+  min-height: 148px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.18s ease, background 0.18s ease;
+  overflow: hidden;
+}
+.ai-dropzone:hover,
+.ai-dropzone:focus-visible {
+  border-color: #7c3aed;
+  background: #faf9ff;
+}
+.ai-dropzone.dragover {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  transform: scale(1.01);
+}
+
+.ai-file-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ai-dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+}
+
+.ai-upload-icon {
+  color: #7c3aed;
+  opacity: 0.7;
+}
+
+.ai-dropzone-label {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.ai-dropzone-link {
+  color: #4f46e5;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.ai-dropzone-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+
+/* ─── Image preview ──────────────────────────────────────────────────────── */
+.ai-image-preview {
+  position: relative;
+  width: 100%;
+  height: 148px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-preview-img {
+  max-height: 148px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.ai-remove-image {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+.ai-remove-image:hover { background: var(--color-error); }
+
+/* ─── Textarea teks ──────────────────────────────────────────────────────── */
+.ai-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--color-text);
+  background: var(--color-ivory);
+  resize: vertical;
+  min-height: 148px;
+  font-family: inherit;
+  line-height: 1.6;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.ai-textarea:focus {
+  outline: none;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+  background: var(--color-white);
+}
+
+/* ─── API Key section ────────────────────────────────────────────────────── */
+.ai-apikey-wrap {
+  margin-bottom: 6px;
+}
+
+.ai-apikey-link {
+  font-size: 0.78rem;
+  color: #4f46e5;
+  font-weight: 500;
+  text-decoration: underline;
+  margin-left: 8px;
+}
+
+.ai-apikey-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  opacity: 0.8;
+}
+
+/* ─── Tombol analisis ────────────────────────────────────────────────────── */
+.btn-ai-analyze {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: var(--color-white);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity 0.18s ease, transform 0.15s ease;
+  box-shadow: 0 2px 8px rgba(79,70,229,0.25);
+}
+.btn-ai-analyze:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-ai-analyze:active { transform: scale(0.97); }
+.btn-ai-analyze:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* spinner di dalam btn-ai-analyze */
+.btn-ai-analyze .btn-spinner {
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: white;
+}
+
+/* ─── Step 2: Hasil AI ───────────────────────────────────────────────────── */
+.ai-result-header {
+  margin-bottom: 16px;
+}
+
+.ai-result-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(22,163,74,0.1);
+  color: var(--color-success);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  margin-bottom: 6px;
+}
+
+.ai-result-note {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+/* ─── Grid hasil ekstraksi ───────────────────────────────────────────────── */
+.ai-result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 480px) {
+  .ai-result-grid { grid-template-columns: 1fr; }
+}
+
+.ai-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-result-item-full {
+  grid-column: 1 / -1;
+}
+
+.ai-result-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ai-result-input {
+  font-size: 0.84rem;
+  padding: 7px 10px;
+}
+
+.ai-field-filled {
+  font-size: 0.72rem;
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+.ai-field-empty {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+/* ─── Confidence indicator ───────────────────────────────────────────────── */
+.ai-confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 20px;
+  margin-bottom: 4px;
+}
+
+.ai-confidence-high   { background: rgba(22,163,74,0.1);   color: #15803d; }
+.ai-confidence-medium { background: rgba(217,119,6,0.1);   color: #92400e; }
+.ai-confidence-low    { background: rgba(220,38,38,0.08);  color: #b91c1c; }

@@ -1097,6 +1097,374 @@ function refreshUI() {
 }
 
 /* =========================================================================
+   AI AGENT — GEMINI VISION
+   =========================================================================
+   Menggunakan Google Gemini 1.5 Flash (gratis) untuk mengekstrak data
+   lamaran dari gambar screenshot atau teks yang ditempel pengguna.
+   API key disimpan di localStorage browser pengguna (tidak ke server).
+   ========================================================================= */
+
+const GEMINI_STORAGE_KEY = 'trackjobs_gemini_key';
+const GEMINI_API_URL     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+
+/** State lokal AI modal */
+const aiState = {
+  mode: 'image',        // 'image' | 'text'
+  imageBase64: null,    // base64 string tanpa prefix
+  imageMimeType: null,  // 'image/png' | 'image/jpeg' dll
+  extracted: null,      // objek hasil ekstraksi AI
+};
+
+/* ─── Buka / tutup modal AI ──────────────────────────────────────────────── */
+
+function openAiModal() {
+  // Reset state
+  aiState.mode = 'image';
+  aiState.imageBase64 = null;
+  aiState.imageMimeType = null;
+  aiState.extracted = null;
+
+  // Reset UI
+  document.getElementById('ai-step-input').classList.remove('hidden');
+  document.getElementById('ai-step-result').classList.add('hidden');
+  document.getElementById('ai-text-input').value = '';
+  document.getElementById('err-ai-apikey').textContent = '';
+  resetAiDropzone();
+  switchAiTab('image');
+
+  // Isi API key yang tersimpan sebelumnya
+  const savedKey = localStorage.getItem(GEMINI_STORAGE_KEY) || '';
+  document.getElementById('ai-apikey').value = savedKey;
+
+  document.getElementById('ai-modal').classList.remove('hidden');
+  trapFocus(document.getElementById('ai-modal'));
+  setTimeout(() => document.getElementById('ai-apikey').focus(), 80);
+}
+
+function closeAiModal() {
+  document.getElementById('ai-modal').classList.add('hidden');
+}
+
+/* ─── Switch tab Gambar / Teks ───────────────────────────────────────────── */
+
+function switchAiTab(tab) {
+  aiState.mode = tab;
+  const isImage = tab === 'image';
+
+  document.getElementById('ai-tab-image').classList.toggle('active', isImage);
+  document.getElementById('ai-tab-image').setAttribute('aria-selected', isImage);
+  document.getElementById('ai-tab-text').classList.toggle('active', !isImage);
+  document.getElementById('ai-tab-text').setAttribute('aria-selected', !isImage);
+  document.getElementById('ai-panel-image').classList.toggle('hidden', !isImage);
+  document.getElementById('ai-panel-text').classList.toggle('hidden', isImage);
+}
+
+/* ─── Dropzone: upload & drag-drop gambar ────────────────────────────────── */
+
+function resetAiDropzone() {
+  aiState.imageBase64 = null;
+  aiState.imageMimeType = null;
+  document.getElementById('ai-dropzone-content').classList.remove('hidden');
+  document.getElementById('ai-image-preview').classList.add('hidden');
+  document.getElementById('ai-preview-img').src = '';
+  document.getElementById('ai-file-input').value = '';
+}
+
+function handleImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    showToast('File harus berupa gambar (PNG, JPG, WEBP).', 'error');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 10MB.', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    // Pisahkan prefix "data:image/png;base64," dari base64 murni
+    const [meta, base64] = dataUrl.split(',');
+    aiState.imageBase64 = base64;
+    aiState.imageMimeType = file.type;
+
+    // Tampilkan preview
+    document.getElementById('ai-dropzone-content').classList.add('hidden');
+    const preview = document.getElementById('ai-image-preview');
+    preview.classList.remove('hidden');
+    document.getElementById('ai-preview-img').src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ─── Kirim ke Gemini API ────────────────────────────────────────────────── */
+
+/**
+ * Prompt yang dikirim ke Gemini.
+ * Menginstruksikan AI untuk hanya mengembalikan JSON tanpa markdown.
+ */
+function buildGeminiPrompt() {
+  const today = new Date().toISOString().split('T')[0];
+  return `Kamu adalah AI ekstraksi data lamaran kerja yang akurat.
+Ekstrak informasi pekerjaan dari konten yang diberikan dan kembalikan HANYA objek JSON valid, tanpa markdown, tanpa penjelasan, tanpa kode blok.
+
+Format JSON yang harus dikembalikan (isi "" jika tidak ditemukan):
+{
+  "company": "nama perusahaan",
+  "position": "posisi/jabatan pekerjaan",
+  "location": "kota atau lokasi kerja",
+  "type": "salah satu dari: Full-time, Part-time, Internship, Contract, Freelance, Remote, atau kosong",
+  "status": "Applied",
+  "applyDate": "${today}",
+  "deadline": "format YYYY-MM-DD jika ada, kosong jika tidak",
+  "salary": "kisaran gaji dalam format teks asli, kosong jika tidak ada",
+  "source": "URL lowongan jika ada, kosong jika tidak",
+  "notes": "informasi penting lainnya seperti kualifikasi, benefit, atau kontak",
+  "confidence": "high | medium | low"
+}
+
+Aturan penting:
+- Hanya kembalikan JSON, tidak ada teks lain
+- Untuk "type": gunakan kata dalam bahasa Inggris sesuai pilihan di atas
+- Untuk "deadline": jika ada tanggal, konversi ke format YYYY-MM-DD
+- Untuk "confidence": "high" jika data lengkap, "medium" jika sebagian, "low" jika minim data`;
+}
+
+async function analyzeWithGemini() {
+  const apiKey = document.getElementById('ai-apikey').value.trim();
+  document.getElementById('err-ai-apikey').textContent = '';
+
+  // Validasi API key
+  if (!apiKey || !apiKey.startsWith('AIza') || apiKey.length < 20) {
+    document.getElementById('err-ai-apikey').textContent = 'Masukkan API key Gemini yang valid (dimulai dengan AIza…).';
+    document.getElementById('ai-apikey').focus();
+    return;
+  }
+
+  // Validasi input konten
+  const isImage = aiState.mode === 'image';
+  if (isImage && !aiState.imageBase64) {
+    showToast('Upload gambar terlebih dahulu.', 'error');
+    return;
+  }
+  const textInput = document.getElementById('ai-text-input').value.trim();
+  if (!isImage && !textInput) {
+    showToast('Tempel teks lowongan terlebih dahulu.', 'error');
+    return;
+  }
+
+  // Simpan API key ke localStorage untuk digunakan berikutnya
+  localStorage.setItem(GEMINI_STORAGE_KEY, apiKey);
+
+  // Set loading state
+  setAiAnalyzeLoading(true);
+
+  // Bangun request body Gemini
+  const parts = [{ text: buildGeminiPrompt() }];
+
+  if (isImage) {
+    parts.push({
+      inline_data: {
+        mime_type: aiState.imageMimeType,
+        data: aiState.imageBase64,
+      }
+    });
+  } else {
+    parts.push({ text: `\n\nKonten lowongan kerja:\n${textInput}` });
+  }
+
+  const requestBody = {
+    contents: [{ parts }],
+    generationConfig: {
+      temperature: 0.1,      // rendah = lebih deterministik
+      maxOutputTokens: 512,
+    },
+  };
+
+  try {
+    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      const msg = errData?.error?.message || `HTTP ${response.status}`;
+      throw new Error(msg);
+    }
+
+    const data = await response.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Parse JSON dari respons Gemini
+    const extracted = parseGeminiResponse(rawText);
+    if (!extracted) {
+      throw new Error('AI tidak dapat mengekstrak data. Coba gambar atau teks yang lebih jelas.');
+    }
+
+    aiState.extracted = extracted;
+    renderAiResult(extracted);
+    showAiStep('result');
+
+  } catch (e) {
+    console.error('Gemini error:', e);
+    const msg = e.message || 'Terjadi kesalahan saat menghubungi AI.';
+    if (msg.includes('API_KEY_INVALID') || msg.includes('API key')) {
+      document.getElementById('err-ai-apikey').textContent = 'API key tidak valid. Periksa kembali.';
+    } else if (msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+      showToast('Kuota Gemini habis. Coba lagi besok atau gunakan API key berbeda.', 'error');
+    } else {
+      showToast(msg, 'error');
+    }
+  } finally {
+    setAiAnalyzeLoading(false);
+  }
+}
+
+/** Parsing respons teks Gemini menjadi objek JavaScript */
+function parseGeminiResponse(rawText) {
+  if (!rawText) return null;
+  try {
+    // Hilangkan markdown code block jika ada
+    const cleaned = rawText
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim();
+    const parsed = JSON.parse(cleaned);
+    // Validasi minimal: harus ada company atau position
+    if (!parsed.company && !parsed.position) return null;
+    return parsed;
+  } catch {
+    // Coba ekstrak JSON dari dalam teks
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+/* ─── Render hasil ekstraksi ─────────────────────────────────────────────── */
+
+function renderAiResult(data) {
+  const grid = document.getElementById('ai-result-grid');
+  grid.innerHTML = '';
+
+  const fields = [
+    { key: 'company',   label: 'Perusahaan',      required: true },
+    { key: 'position',  label: 'Posisi',           required: true },
+    { key: 'location',  label: 'Lokasi' },
+    { key: 'type',      label: 'Jenis Pekerjaan' },
+    { key: 'deadline',  label: 'Tenggat Waktu' },
+    { key: 'salary',    label: 'Kisaran Gaji' },
+    { key: 'source',    label: 'URL Lowongan' },
+    { key: 'notes',     label: 'Catatan',          full: true },
+  ];
+
+  fields.forEach(f => {
+    const val = data[f.key] || '';
+    const item = document.createElement('div');
+    item.className = 'ai-result-item' + (f.full ? ' ai-result-item-full' : '');
+
+    const lbl = document.createElement('label');
+    lbl.className = 'ai-result-label';
+    lbl.textContent = f.label + (f.required ? ' *' : '');
+
+    const isTextarea = f.full;
+    const input = document.createElement(isTextarea ? 'textarea' : 'input');
+    input.className = 'form-input ai-result-input' + (isTextarea ? ' form-textarea' : '');
+    input.dataset.field = f.key;
+    if (isTextarea) {
+      input.rows = 3;
+      input.value = val;
+    } else {
+      input.type = 'text';
+      input.value = val;
+    }
+
+    // Indikator field terisi atau kosong
+    const indicator = document.createElement('span');
+    indicator.className = val ? 'ai-field-filled' : 'ai-field-empty';
+    indicator.textContent = val ? '✓ Terdeteksi' : '— Tidak ditemukan';
+
+    item.append(lbl, input, indicator);
+    grid.appendChild(item);
+  });
+
+  // Confidence indicator
+  const conf = data.confidence || 'medium';
+  const confEl = document.getElementById('ai-confidence');
+  confEl.className = `ai-confidence ai-confidence-${conf}`;
+  confEl.innerHTML = '';
+  const confLabels = { high: '🟢 Kepercayaan Tinggi', medium: '🟡 Kepercayaan Sedang', low: '🔴 Kepercayaan Rendah' };
+  confEl.textContent = confLabels[conf] || confLabels.medium;
+  confEl.classList.remove('hidden');
+}
+
+/* ─── Terapkan hasil ke form utama ───────────────────────────────────────── */
+
+function applyAiResultToForm() {
+  // Baca nilai dari input hasil AI (yang mungkin sudah diedit user)
+  const grid = document.getElementById('ai-result-grid');
+  const inputs = grid.querySelectorAll('[data-field]');
+  const result = { ...aiState.extracted };
+  inputs.forEach(inp => {
+    result[inp.dataset.field] = inp.value.trim();
+  });
+
+  closeAiModal();
+  openAddModal();  // buka form tambah, lalu isi
+
+  // Isi form dengan hasil AI
+  setTimeout(() => {
+    if (result.company)   document.getElementById('form-company').value   = result.company;
+    if (result.position)  document.getElementById('form-position').value  = result.position;
+    if (result.location)  document.getElementById('form-location').value  = result.location;
+    if (result.salary)    document.getElementById('form-salary').value    = result.salary;
+    if (result.source)    document.getElementById('form-source').value    = result.source;
+    if (result.notes)     document.getElementById('form-notes').value     = result.notes;
+    if (result.deadline)  document.getElementById('form-deadline').value  = result.deadline;
+    if (result.applyDate) document.getElementById('form-apply-date').value = result.applyDate;
+
+    // Jenis pekerjaan — cocokkan dengan opsi yang tersedia
+    const typeMap = {
+      'full-time': 'Full-time', 'fulltime': 'Full-time',
+      'part-time': 'Part-time', 'parttime': 'Part-time',
+      'internship': 'Internship', 'magang': 'Internship',
+      'contract': 'Contract', 'kontrak': 'Contract',
+      'freelance': 'Freelance',
+      'remote': 'Remote',
+    };
+    const typeNorm = (result.type || '').toLowerCase().replace(/\s+/g, '');
+    const mappedType = typeMap[typeNorm] || result.type || '';
+    if (mappedType) document.getElementById('form-type').value = mappedType;
+
+    showToast('✨ Formulir berhasil diisi oleh AI!', 'success');
+  }, 80);
+}
+
+/* ─── Helper UI AI ───────────────────────────────────────────────────────── */
+
+function showAiStep(step) {
+  document.getElementById('ai-step-input').classList.toggle('hidden', step !== 'input');
+  document.getElementById('ai-step-result').classList.toggle('hidden', step !== 'result');
+}
+
+function setAiAnalyzeLoading(loading) {
+  const btn     = document.getElementById('btn-ai-analyze');
+  const text    = document.getElementById('btn-ai-analyze-text');
+  const spinner = document.getElementById('btn-ai-analyze-spinner');
+  btn.disabled  = loading;
+  text.textContent = loading ? 'Menganalisis…' : 'Analisis dengan AI';
+  spinner.classList.toggle('hidden', !loading);
+}
+
+/* =========================================================================
    RESULTS COUNT ELEMENT
    ========================================================================= */
 
@@ -1169,6 +1537,64 @@ function registerEventListeners() {
     }
   });
 
+  // ── AI Agent buttons ────────────────────────────────────────────────────
+  document.getElementById('btn-ai-scan').addEventListener('click', openAiModal);
+  document.getElementById('ai-modal-close').addEventListener('click', closeAiModal);
+  document.getElementById('ai-modal-cancel').addEventListener('click', closeAiModal);
+  document.getElementById('ai-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeAiModal(); });
+
+  // Tab gambar / teks
+  document.getElementById('ai-tab-image').addEventListener('click', () => switchAiTab('image'));
+  document.getElementById('ai-tab-text').addEventListener('click', () => switchAiTab('text'));
+
+  // Dropzone — klik
+  document.getElementById('ai-dropzone').addEventListener('click', (e) => {
+    if (!e.target.closest('#ai-remove-image')) {
+      document.getElementById('ai-file-input').click();
+    }
+  });
+  document.getElementById('ai-dropzone').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      document.getElementById('ai-file-input').click();
+    }
+  });
+
+  // File input change
+  document.getElementById('ai-file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) handleImageFile(file);
+  });
+
+  // Hapus gambar
+  document.getElementById('ai-remove-image').addEventListener('click', (e) => {
+    e.stopPropagation();
+    resetAiDropzone();
+  });
+
+  // Drag & drop
+  const dropzone = document.getElementById('ai-dropzone');
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) handleImageFile(file);
+  });
+
+  // Tombol analisis
+  document.getElementById('btn-ai-analyze').addEventListener('click', analyzeWithGemini);
+
+  // Tombol kembali dari hasil
+  document.getElementById('ai-result-back').addEventListener('click', () => showAiStep('input'));
+
+  // Tombol terapkan hasil ke form
+  document.getElementById('btn-ai-apply').addEventListener('click', applyAiResultToForm);
+
   // ── Add / Edit buttons ──────────────────────────────────────────────────
   document.getElementById('btn-add-top').addEventListener('click', openAddModal);
   document.getElementById('btn-add-dashboard').addEventListener('click', openAddModal);
@@ -1184,6 +1610,7 @@ function registerEventListeners() {
       if (!document.getElementById('job-modal').classList.contains('hidden'))     closeModal();
       if (!document.getElementById('detail-modal').classList.contains('hidden'))  closeDetailModal();
       if (!document.getElementById('confirm-modal').classList.contains('hidden')) cancelDelete();
+      if (!document.getElementById('ai-modal').classList.contains('hidden'))      closeAiModal();
       if (document.getElementById('sidebar').classList.contains('open'))          closeMobileSidebar();
     }
   });
