@@ -266,7 +266,7 @@ async function signIn(email, password) {
 /** Kirim OTP reset password ke email via Supabase */
 async function sendPasswordResetOtp(email) {
   const { data, error } = await db.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}${window.location.pathname}`,
+    redirectTo: 'https://rkyangga.github.io/TrackJobs/',
   });
   if (error) return { error: error.message };
   return { success: true, data };
