@@ -263,6 +263,24 @@ async function signIn(email, password) {
   return { user: data.user };
 }
 
+/** Kirim OTP reset password ke email via Supabase */
+async function sendPasswordResetOtp(email) {
+  const { data, error } = await db.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}${window.location.pathname}`,
+  });
+  if (error) return { error: error.message };
+  return { success: true, data };
+}
+
+/** Update kata sandi pengguna baru setelah link recovery dibuka */
+async function updatePassword(newPassword) {
+  const { data, error } = await db.auth.updateUser({
+    password: newPassword,
+  });
+  if (error) return { error: error.message };
+  return { success: true, user: data.user };
+}
+
 /** Logout */
 async function signOut() {
   await db.auth.signOut();
@@ -373,6 +391,112 @@ async function handleLogin(e) {
   }
 
   // Login berhasil — onAuthStateChange akan menangani transisi
+}
+
+// State sementara untuk flow reset password
+let resetPasswordEmail = '';
+
+function openResetPasswordModal() {
+  resetPasswordEmail = '';
+  document.getElementById('reset-password-modal').classList.remove('hidden');
+  document.getElementById('reset-step-email').classList.remove('hidden');
+  document.getElementById('reset-step-otp').classList.add('hidden');
+  document.getElementById('reset-email-form').reset();
+  document.getElementById('reset-otp-form').reset();
+  document.getElementById('err-reset-email').textContent = '';
+  document.getElementById('err-reset-otp').textContent = '';
+  document.getElementById('err-reset-new-password').textContent = '';
+}
+
+function closeResetPasswordModal() {
+  document.getElementById('reset-password-modal').classList.add('hidden');
+}
+
+async function handleSendResetOtp(e) {
+  e.preventDefault();
+  const emailInput = document.getElementById('reset-email');
+  const errEmail = document.getElementById('err-reset-email');
+  const btnText = document.getElementById('btn-send-otp-text');
+  const btnSpinner = document.getElementById('btn-send-otp-spinner');
+  const email = emailInput.value.trim();
+
+  errEmail.textContent = '';
+  emailInput.classList.remove('input-error');
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    emailInput.classList.add('input-error');
+    errEmail.textContent = 'Masukkan email yang valid.';
+    return;
+  }
+
+  btnText.textContent = 'Mengirim…';
+  btnSpinner.classList.remove('hidden');
+
+  const result = await sendPasswordResetOtp(email);
+
+  btnText.textContent = 'Kirim OTP';
+  btnSpinner.classList.add('hidden');
+
+  if (result.error) {
+    errEmail.textContent = result.error;
+    return;
+  }
+
+  resetPasswordEmail = email;
+  closeResetPasswordModal();
+  showToast('Tautan reset password dikirim. Buka email Anda untuk melanjutkan.', 'info');
+}
+
+async function handleVerifyResetOtp(e) {
+  e.preventDefault();
+  const otpInput = document.getElementById('reset-otp');
+  const pwInput = document.getElementById('reset-new-password');
+  const errOtp = document.getElementById('err-reset-otp');
+  const errPw = document.getElementById('err-reset-new-password');
+  const btnText = document.getElementById('btn-verify-otp-text');
+  const btnSpinner = document.getElementById('btn-verify-otp-spinner');
+
+  errOtp.textContent = '';
+  errPw.textContent = '';
+  otpInput.classList.remove('input-error');
+  pwInput.classList.remove('input-error');
+
+  const token = otpInput.value.trim();
+  const newPassword = pwInput.value;
+  let valid = true;
+
+  if (!newPassword || newPassword.length < 6) {
+    pwInput.classList.add('input-error');
+    errPw.textContent = 'Kata sandi baru minimal 6 karakter.';
+    valid = false;
+  }
+
+  if (!valid) return;
+
+  btnText.textContent = 'Memverifikasi…';
+  btnSpinner.classList.remove('hidden');
+
+  // Link reset dari email membuat recovery session otomatis.
+  const { data: { session } } = await db.auth.getSession();
+  if (!session?.user) {
+    btnText.textContent = 'Reset Password';
+    btnSpinner.classList.add('hidden');
+    errPw.textContent = 'Buka tautan reset password dari email terlebih dahulu.';
+    return;
+  }
+
+  const updateRes = await updatePassword(newPassword);
+  btnText.textContent = 'Reset Password';
+  btnSpinner.classList.add('hidden');
+
+  if (updateRes.error) {
+    errPw.textContent = updateRes.error;
+    return;
+  }
+
+  showToast('Kata sandi berhasil direset! Silakan masuk kembali.', 'success');
+  closeResetPasswordModal();
+  await signOut();
 }
 
 async function handleRegister(e) {
@@ -1863,6 +1987,37 @@ function registerEventListeners() {
   document.getElementById('login-form').addEventListener('submit', handleLogin);
   document.getElementById('register-form').addEventListener('submit', handleRegister);
 
+  // ── Forgot Password & OTP ───────────────────────────────────────────────
+  const forgotBtn = document.getElementById('btn-forgot-password');
+  if (forgotBtn) forgotBtn.addEventListener('click', openResetPasswordModal);
+
+  const resetClose = document.getElementById('reset-modal-close');
+  if (resetClose) resetClose.addEventListener('click', closeResetPasswordModal);
+
+  const resetCancel = document.getElementById('reset-email-cancel');
+  if (resetCancel) resetCancel.addEventListener('click', closeResetPasswordModal);
+
+  const resetBack = document.getElementById('reset-otp-back');
+  if (resetBack) {
+    resetBack.addEventListener('click', () => {
+      document.getElementById('reset-step-otp').classList.add('hidden');
+      document.getElementById('reset-step-email').classList.remove('hidden');
+    });
+  }
+
+  const resetModal = document.getElementById('reset-password-modal');
+  if (resetModal) {
+    resetModal.addEventListener('click', (e) => {
+      if (e.target === resetModal) closeResetPasswordModal();
+    });
+  }
+
+  const sendOtpForm = document.getElementById('reset-email-form');
+  if (sendOtpForm) sendOtpForm.addEventListener('submit', handleSendResetOtp);
+
+  const verifyOtpForm = document.getElementById('reset-otp-form');
+  if (verifyOtpForm) verifyOtpForm.addEventListener('submit', handleVerifyResetOtp);
+
   // ── Password toggle visibility ─────────────────────────────────────────
   document.querySelectorAll('.btn-toggle-pw').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2049,6 +2204,13 @@ async function init() {
   // Pantau perubahan sesi autentikasi
   db.auth.onAuthStateChange(async (event, session) => {
     authSessionResolved = true;
+
+    if (event === 'PASSWORD_RECOVERY') {
+      openResetPasswordModal();
+      document.getElementById('reset-step-email').classList.add('hidden');
+      document.getElementById('reset-step-otp').classList.remove('hidden');
+      return;
+    }
 
     if (event === 'SIGNED_IN' && session?.user) {
       state.currentUser = session.user;

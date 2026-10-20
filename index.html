@@ -79,6 +79,9 @@
               <span id="btn-login-text">Masuk</span>
               <span id="btn-login-spinner" class="btn-spinner hidden" aria-hidden="true"></span>
             </button>
+            <p class="auth-notice">
+              <button type="button" id="btn-forgot-password" class="auth-forgot-link">Lupa kata sandi?</button>
+            </p>
           </form>
         </div>
 
@@ -129,6 +132,69 @@
 
     </div><!-- end .auth-container -->
   </div><!-- end #auth-page -->
+
+  <!-- ===================== MODAL: RESET PASSWORD ===================== -->
+  <div id="reset-password-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="reset-modal-title">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-header">
+        <h2 id="reset-modal-title" class="modal-title">Reset Kata Sandi</h2>
+        <button id="reset-modal-close" class="modal-close" aria-label="Tutup">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Step 1: Enter Email -->
+      <div id="reset-step-email" class="reset-step">
+        <p class="auth-subtitle">Masukkan email Anda. Kami akan mengirim kode OTP untuk reset password.</p>
+        <form id="reset-email-form" novalidate>
+          <div class="form-group">
+            <label for="reset-email" class="form-label">Email</label>
+            <input type="email" id="reset-email" class="form-input" placeholder="nama@email.com" autocomplete="email" required />
+            <span class="form-error" id="err-reset-email" role="alert"></span>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="reset-email-cancel" class="btn-secondary">Batal</button>
+            <button type="submit" id="btn-send-otp" class="btn-primary">
+              <span id="btn-send-otp-text">Kirim OTP</span>
+              <span id="btn-send-otp-spinner" class="btn-spinner hidden" aria-hidden="true"></span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Step 2: Enter OTP -->
+      <div id="reset-step-otp" class="reset-step hidden">
+        <p class="auth-subtitle">Buka email Anda, lalu klik tautan reset password. Setelah itu, masukkan kata sandi baru di sini.</p>
+        <form id="reset-otp-form" novalidate>
+          <div class="form-group hidden">
+            <label for="reset-otp" class="form-label">Kode OTP</label>
+            <input type="text" id="reset-otp" class="form-input" autocomplete="off" />
+            <span class="form-error" id="err-reset-otp" role="alert"></span>
+          </div>
+          <div class="form-group">
+            <label for="reset-new-password" class="form-label">Kata Sandi Baru</label>
+            <div class="input-password-wrap">
+              <input type="password" id="reset-new-password" class="form-input" placeholder="Minimal 6 karakter" minlength="6" autocomplete="new-password" required />
+              <button type="button" class="btn-toggle-pw" data-target="reset-new-password" aria-label="Tampilkan/sembunyikan kata sandi">
+                <svg class="icon-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <span class="form-error" id="err-reset-new-password" role="alert"></span>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="reset-otp-back" class="btn-secondary">Kembali</button>
+            <button type="submit" id="btn-verify-otp" class="btn-primary">
+              <span id="btn-verify-otp-text">Reset Password</span>
+              <span id="btn-verify-otp-spinner" class="btn-spinner hidden" aria-hidden="true"></span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div><!-- end #reset-password-modal -->
 
   <!-- ===================== SIDEBAR OVERLAY (mobile) ===================== -->
   <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>

@@ -1439,6 +1439,27 @@ body {
   font-size: 0.75rem;
   color: var(--color-text-muted);
   opacity: 0.75;
+  margin-top: 12px;
+}
+
+.auth-forgot-link {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+  transition: color var(--transition);
+}
+
+.auth-forgot-link:hover {
+  color: var(--color-primary-dark);
+}
+
+/* ─── Reset Password Modal ───────────────────────────────────────────────── */
+.reset-step {
+  padding: 20px 24px;
 }
 
 /* ─── Supabase Warning Banner ────────────────────────────────────────────── */
