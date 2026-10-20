@@ -395,9 +395,9 @@ async function handleLogin(e) {
 
 // State sementara untuk flow reset password
 let resetPasswordEmail = '';
+let passwordRecoveryActive = false;
 
 function openResetPasswordModal() {
-  resetPasswordEmail = '';
   document.getElementById('reset-password-modal').classList.remove('hidden');
   document.getElementById('reset-step-email').classList.remove('hidden');
   document.getElementById('reset-step-otp').classList.add('hidden');
@@ -495,8 +495,10 @@ async function handleVerifyResetOtp(e) {
   }
 
   showToast('Kata sandi berhasil direset! Silakan masuk kembali.', 'success');
+  passwordRecoveryActive = false;
   closeResetPasswordModal();
   await signOut();
+  history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
 }
 
 async function handleRegister(e) {
@@ -2203,12 +2205,14 @@ async function init() {
 
   // Cek apakah URL memuat token recovery password
   const isPasswordRecoveryFlow = window.location.hash.includes('type=recovery');
+  passwordRecoveryActive = isPasswordRecoveryFlow;
 
   // Pantau perubahan sesi autentikasi
   db.auth.onAuthStateChange(async (event, session) => {
     authSessionResolved = true;
 
-    if (event === 'PASSWORD_RECOVERY' || (isPasswordRecoveryFlow && session?.user)) {
+    if (event === 'PASSWORD_RECOVERY' || (passwordRecoveryActive && session?.user)) {
+      passwordRecoveryActive = true;
       showAuthPage();
       openResetPasswordModal();
       document.getElementById('reset-step-email').classList.add('hidden');
@@ -2216,7 +2220,7 @@ async function init() {
       return;
     }
 
-    if (isPasswordRecoveryFlow) return;
+    if (passwordRecoveryActive) return;
 
     if (event === 'SIGNED_IN' && session?.user) {
       state.currentUser = session.user;
@@ -2238,7 +2242,7 @@ async function init() {
 
   // Cek sesi yang sudah ada (user refresh halaman)
   try {
-    if (isPasswordRecoveryFlow) {
+    if (passwordRecoveryActive) {
       showAuthPage();
       openResetPasswordModal();
       document.getElementById('reset-step-email').classList.add('hidden');
