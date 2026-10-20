@@ -2201,16 +2201,22 @@ async function init() {
 
   let authSessionResolved = false;
 
+  // Cek apakah URL memuat token recovery password
+  const isPasswordRecoveryFlow = window.location.hash.includes('type=recovery');
+
   // Pantau perubahan sesi autentikasi
   db.auth.onAuthStateChange(async (event, session) => {
     authSessionResolved = true;
 
-    if (event === 'PASSWORD_RECOVERY') {
+    if (event === 'PASSWORD_RECOVERY' || (isPasswordRecoveryFlow && session?.user)) {
+      showAuthPage();
       openResetPasswordModal();
       document.getElementById('reset-step-email').classList.add('hidden');
       document.getElementById('reset-step-otp').classList.remove('hidden');
       return;
     }
+
+    if (isPasswordRecoveryFlow) return;
 
     if (event === 'SIGNED_IN' && session?.user) {
       state.currentUser = session.user;
@@ -2232,6 +2238,14 @@ async function init() {
 
   // Cek sesi yang sudah ada (user refresh halaman)
   try {
+    if (isPasswordRecoveryFlow) {
+      showAuthPage();
+      openResetPasswordModal();
+      document.getElementById('reset-step-email').classList.add('hidden');
+      document.getElementById('reset-step-otp').classList.remove('hidden');
+      return;
+    }
+
     const { data: { session } } = await db.auth.getSession();
     if (session?.user) {
       state.currentUser = session.user;
