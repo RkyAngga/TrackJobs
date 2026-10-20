@@ -58,6 +58,38 @@ let state = {
 };
 
 /* =========================================================================
+   PASSWORD RECOVERY FLAG
+   =========================================================================
+   Dideteksi sedini mungkin, sebelum Supabase menghapus token dari URL.
+   Disimpan di sessionStorage agar bertahan saat halaman di-reload.
+   ========================================================================= */
+
+const RECOVERY_FLAG_KEY = 'tj-password-recovery';
+
+function detectPasswordRecovery() {
+  const url = `${window.location.hash || ''}${window.location.search || ''}`;
+  if (/type=recovery/.test(url)) {
+    try { sessionStorage.setItem(RECOVERY_FLAG_KEY, '1'); } catch {}
+    return true;
+  }
+  try {
+    return sessionStorage.getItem(RECOVERY_FLAG_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setPasswordRecoveryActive(active) {
+  passwordRecoveryActive = active;
+  try {
+    if (active) sessionStorage.setItem(RECOVERY_FLAG_KEY, '1');
+    else sessionStorage.removeItem(RECOVERY_FLAG_KEY);
+  } catch {}
+}
+
+let passwordRecoveryActive = detectPasswordRecovery();
+
+/* =========================================================================
    SUPABASE CLIENT
    ========================================================================= */
 
@@ -312,9 +344,24 @@ function showAuthPage() {
 }
 
 function showAppPage() {
+  // Selama proses reset password, dashboard tidak boleh ditampilkan.
+  if (passwordRecoveryActive) {
+    showRecoveryPasswordStep();
+    return;
+  }
   document.getElementById('auth-page').classList.add('hidden');
   document.getElementById('app-wrapper').classList.remove('hidden');
   hideLoadingScreen();
+}
+
+/** Tampilkan halaman login + modal reset pada langkah kata sandi baru */
+function showRecoveryPasswordStep() {
+  document.getElementById('auth-page').classList.remove('hidden');
+  document.getElementById('app-wrapper').classList.add('hidden');
+  hideLoadingScreen();
+  document.getElementById('reset-password-modal').classList.remove('hidden');
+  document.getElementById('reset-step-email').classList.add('hidden');
+  document.getElementById('reset-step-otp').classList.remove('hidden');
 }
 
 function clearAuthErrors() {
@@ -395,7 +442,6 @@ async function handleLogin(e) {
 
 // State sementara untuk flow reset password
 let resetPasswordEmail = '';
-let passwordRecoveryActive = false;
 
 function openResetPasswordModal() {
   document.getElementById('reset-password-modal').classList.remove('hidden');
@@ -495,7 +541,7 @@ async function handleVerifyResetOtp(e) {
   }
 
   showToast('Kata sandi berhasil direset! Silakan masuk kembali.', 'success');
-  passwordRecoveryActive = false;
+  setPasswordRecoveryActive(false);
   closeResetPasswordModal();
   await signOut();
   history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
@@ -2203,24 +2249,23 @@ async function init() {
 
   let authSessionResolved = false;
 
-  // Cek apakah URL memuat token recovery password
-  const isPasswordRecoveryFlow = window.location.hash.includes('type=recovery');
-  passwordRecoveryActive = isPasswordRecoveryFlow;
-
   // Pantau perubahan sesi autentikasi
   db.auth.onAuthStateChange(async (event, session) => {
     authSessionResolved = true;
 
     if (event === 'PASSWORD_RECOVERY' || (passwordRecoveryActive && session?.user)) {
-      passwordRecoveryActive = true;
-      showAuthPage();
-      openResetPasswordModal();
-      document.getElementById('reset-step-email').classList.add('hidden');
-      document.getElementById('reset-step-otp').classList.remove('hidden');
+      setPasswordRecoveryActive(true);
+      state.currentUser = session?.user || null;
+      showRecoveryPasswordStep();
       return;
     }
 
-    if (passwordRecoveryActive) return;
+    if (passwordRecoveryActive) {
+      // Selama flow recovery, semua event sesi lain diabaikan
+      // kecuali user menekan tombol modal secara manual.
+      showRecoveryPasswordStep();
+      return;
+    }
 
     if (event === 'SIGNED_IN' && session?.user) {
       state.currentUser = session.user;
@@ -2243,10 +2288,9 @@ async function init() {
   // Cek sesi yang sudah ada (user refresh halaman)
   try {
     if (passwordRecoveryActive) {
-      showAuthPage();
-      openResetPasswordModal();
-      document.getElementById('reset-step-email').classList.add('hidden');
-      document.getElementById('reset-step-otp').classList.remove('hidden');
+      // Tetap panggil getSession agar Supabase selesai memproses token di URL.
+      await db.auth.getSession();
+      showRecoveryPasswordStep();
       return;
     }
 
